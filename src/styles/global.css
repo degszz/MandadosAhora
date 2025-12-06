@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@import "tailwindcss-animated";
+@plugin "@midudev/tailwind-animations";
+
+h1, h2, h3{
+    font-family: 'Poppins', sans-serif;
+}
+span, p, a , button, input, textarea{
+    font-family: 'Inter', sans-serif;
+}
