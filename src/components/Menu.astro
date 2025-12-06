@@ -1,0 +1,194 @@
+---
+const Links = [
+    {
+        name: "Mercado",
+        link: "/mercado",
+    },
+    {
+        name: "Farmacia",
+        link: "/farmacia",
+    },
+    {
+        name: "Carniceria",
+        link: "/carniceria",
+    },
+    {
+        name: "24 Horas",
+        link: "/24horas",
+    },
+    {
+        name: "Verduleria",
+        link: "/verduleria",
+    },
+    {
+        name: "Libreria",
+        link: "/libreria",
+    },
+    {
+        name: "Licoreria",
+        link: "/licoreria",
+    },
+    {
+        name: "Lavanderia",
+        link: "/lavanderia",
+    },
+    {
+        name: "Panaderia",
+        link: "/panaderia",
+    },
+    {
+        name: "Más",
+        link: "/mas",
+    },
+];
+import "../styles/global.css";
+---
+
+<nav>
+    <!-- BOTÓN -->
+    <a
+        id="menu-button"
+        class="cursor-pointer text-black lg:hidden"
+        aria-controls="navbar-sticky"
+        aria-expanded="false"
+    >
+        <div class="p-2 hover:bg-kai-200 rounded-md dark:hover:bg-kai-900">
+            <!-- ICONO MENÚ -->
+            <svg
+                id="icon-menu"
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="block"
+            >
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                <path d="M4 8h16"></path>
+                <path d="M4 16h16"></path>
+            </svg>
+
+            <!-- ICONO CERRAR (X) -->
+            <svg
+                id="icon-close"
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="hidden"
+            >
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                <path d="M18 6L6 18"></path>
+                <path d="M6 6l12 12"></path>
+            </svg>
+        </div>
+    </a>
+
+    <!-- MENÚ -->
+    <div id="menu-open" class="hidden w-full navbar ">
+        <div
+            class="bg-[#F3F5F6] z-[1001] animate-fade-in-right animate-duration-fast w-[40vw] md:w-[30vw] h-[calc(100vh-90px)] lg:hidden left-0 top-[90px] absolute pl-6 font-medium md:mt-0"
+        >
+            <div class="flex flex-col justify-between h-full text-start">
+                <div>
+                    <ul class="w-fit mb-2">
+                        <h3 class="mt-2"><b>Dashboard:</b></h3>
+
+                        <li class="border-l dark:border-white border-black">
+                            <a
+                                href="/"
+                                class="menu-link hover:underline text-start btn block py-2 pl-3 dark:text-white dark:hover:text-kai-text rounded hover:text-kai-text"
+                            >
+                                Inicio
+                            </a>
+                        </li>
+
+                        <li class="border-l dark:border-white border-black">
+                            <a
+                                href="#servicios"
+                                class="menu-link hover:underline text-start btn block py-2 pl-3 dark:text-white dark:hover:text-kai-text rounded hover:text-kai-text"
+                                target="_top"
+                            >
+                                Servicios
+                            </a>
+                        </li>
+
+                        <li class="border-l dark:border-white border-black">
+                            <a
+                                href="#informacion"
+                                class="menu-link hover:underline text-start btn block py-2 pl-3 dark:text-white dark:hover:text-kai-text rounded hover:text-kai-text"
+                                target="_top"
+                            >
+                                Sobre Nosotros
+                            </a>
+                        </li>
+                    </ul>
+
+                    <ul class="w-fit mb-2 ">
+                        <h3 class="mt-2"><b>Servicios:</b></h3>
+
+                        {
+                            Links.map((link) => (
+                                <li class="">
+                                    <a
+                                        href={`/servicios${link.link}`}
+                                        class="menu-link hover:underline text-start btn block pt-2 pl-3 dark:text-white dark:hover:text-kai-text rounded hover:text-kai-text"
+                                    >
+                                        {link.name}
+                                    </a>
+                                </li>
+                            ))
+                        }
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav>
+<div
+    id="menu-overlay"
+    class="hidden fixed top-[90px] left-0 w-full h-[calc(100vh-90px)] bg-black/40 z-[900]"
+>
+</div>
+
+<script>
+    const button = document.querySelector("#menu-button");
+    const menuOpen = document.querySelector("#menu-open");
+    const iconMenu = document.querySelector("#icon-menu");
+    const iconClose = document.querySelector("#icon-close");
+    const overlay = document.querySelector("#menu-overlay");
+
+    function closeMenu() {
+        menuOpen.classList.add("hidden");
+        overlay.classList.add("hidden");
+        iconMenu.classList.remove("hidden");
+        iconClose.classList.add("hidden");
+    }
+
+    // Abrir / cerrar menú
+    button?.addEventListener("click", () => {
+        menuOpen.classList.toggle("hidden");
+        overlay.classList.toggle("hidden");
+
+        const isOpen = !menuOpen.classList.contains("hidden");
+        iconMenu.classList.toggle("hidden", isOpen);
+        iconClose.classList.toggle("hidden", !isOpen);
+    });
+
+    // Cerrar al hacer clic en un link
+    document.querySelectorAll(".menu-link").forEach((link) => {
+        link.addEventListener("click", closeMenu);
+    });
+
+    // Cerrar al tocar fuera del menú (overlay)
+    overlay.addEventListener("click", closeMenu);
+</script>
