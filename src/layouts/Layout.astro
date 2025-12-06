@@ -1,22 +1,29 @@
+---
+const { title } = Astro.props;
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+---
+
 <!doctype html>
-<html lang="en">
+<html lang="en" class="">
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.avif" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Astro Basics</title>
+		<title>Mandados Ahora</title>
+		<link
+			href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@600;700;800&display=swap"
+			rel="stylesheet"
+		/>
 	</head>
-	<body>
-		<slot />
+	<body
+		class="h-full from-[#f4f6f7] bg-gradient-to-b via-[#e4e7e9] to-[#616d79]"
+	>
+		<Header />
+		<main class="mt-[90px] md:mt-[90px]">
+			<slot />
+		</main>
+		<Footer />
 	</body>
 </html>
-
-<style>
-	html,
-	body {
-		margin: 0;
-		width: 100%;
-		height: 100%;
-	}
-</style>
