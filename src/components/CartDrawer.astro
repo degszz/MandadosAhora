@@ -1,0 +1,313 @@
+---
+---
+
+<!-- Botón flotante -->
+<div class="fixed bottom-6 right-6 z-[1100]">
+  <button
+    id="cart-toggle"
+    aria-label="Abrir carrito"
+    class="relative bg-white  rounded-full w-14 h-14 flex items-center justify-center shadow-xl transition-all duration-200 hover:scale-110 active:scale-95"
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="26"
+      height="26"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#5994FC"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+      <path d="M6 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
+      <path d="M17 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
+      <path d="M17 17h-11v-14h-2"></path>
+      <path d="M6 5l14 1l-1 7h-13"></path>
+    </svg>
+    <span
+      id="cart-badge"
+      class="hidden absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1 leading-none pointer-events-none"
+    >0</span>
+  </button>
+</div>
+
+<!-- Overlay -->
+<div
+  id="cart-overlay"
+  class="hidden fixed inset-0 bg-black/50 z-[1050]"
+></div>
+
+<!-- Drawer -->
+<aside
+  id="cart-drawer"
+  class="fixed top-0 right-0 h-full w-full max-w-sm bg-[#F3F5F6] z-[1100] translate-x-full transition-transform duration-300 ease-in-out flex flex-col shadow-2xl"
+>
+  <!-- Cabecera -->
+  <div class="flex items-center justify-between px-5 py-4 bg-white border-b border-gray-200">
+    <div class="flex items-center gap-2">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#377DEC"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+        <path d="M6 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
+        <path d="M17 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>
+        <path d="M17 17h-11v-14h-2"></path>
+        <path d="M6 5l14 1l-1 7h-13"></path>
+      </svg>
+      <h2 class="text-lg font-bold text-gray-800">Mi Carrito</h2>
+    </div>
+    <button
+      id="cart-close"
+      class="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+      aria-label="Cerrar carrito"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M18 6L6 18"></path>
+        <path d="M6 6l12 12"></path>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Lista de items -->
+  <div id="cart-items-list" class="flex-1 overflow-y-auto p-4 space-y-3">
+  </div>
+
+  <!-- Footer con acciones -->
+  <div id="cart-footer" class="p-4 bg-white border-t border-gray-200 space-y-2">
+    <button
+      id="cart-clear-btn"
+      class="w-full border-2 border-gray-200 text-gray-500 rounded-lg py-2 text-sm font-medium hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-all duration-150"
+    >
+      Vaciar carrito
+    </button>
+    <a
+      id="cart-checkout-btn"
+      href="/checkout"
+      class="w-full bg-[#377DEC] hover:bg-[#2563c0] text-white rounded-lg py-2.5 font-semibold text-sm transition-all duration-150 hover:shadow-md flex items-center justify-center gap-2"
+    >
+      Continuar con el pedido
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12h14"/>
+        <path d="M13 5l7 7l-7 7"/>
+      </svg>
+    </a>
+  </div>
+</aside>
+
+<script>
+  import { getItems, removeItem, updateItem, clear, subscribe } from "../scripts/cart.js";
+  import { SERVICIOS } from "../data/servicios.js";
+
+  const toggle = document.getElementById("cart-toggle");
+  const closeBtn = document.getElementById("cart-close");
+  const overlay = document.getElementById("cart-overlay");
+  const drawer = document.getElementById("cart-drawer");
+  const badge = document.getElementById("cart-badge");
+  const itemsList = document.getElementById("cart-items-list");
+  const clearBtn = document.getElementById("cart-clear-btn");
+  const footer = document.getElementById("cart-footer");
+
+  // Lookup imagen por nombre del servicio (fallback para items viejos del localStorage
+  // que no guardaron imagen al momento de agregarse).
+  const IMG_BY_SERVICIO = Object.fromEntries(
+    SERVICIOS.map((s) => [s.servicio, s.imagen])
+  );
+
+  const escapeHtml = (s) =>
+    String(s ?? "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[c]));
+
+  const getItemImage = (item) =>
+    item.imagen || IMG_BY_SERVICIO[item.servicio] || "";
+
+  const autoResize = (ta) => {
+    ta.style.height = "auto";
+    ta.style.height = ta.scrollHeight + "px";
+  };
+
+  // Para no perder el foco al tipear, sólo re-renderizamos cuando cambia
+  // el set de IDs (add/remove/clear). Las ediciones in-place actualizan
+  // el storage pero no tocan el DOM.
+  let lastRenderedIds = "";
+
+  function openDrawer() {
+    drawer.classList.remove("translate-x-full");
+    overlay.classList.remove("hidden");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeDrawer() {
+    drawer.classList.add("translate-x-full");
+    overlay.classList.add("hidden");
+    document.body.style.overflow = "";
+  }
+
+  function renderItems() {
+    const items = getItems();
+
+    // Badge
+    if (items.length > 0) {
+      badge.textContent = String(items.length);
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+    }
+
+    // Footer
+    footer.style.display = items.length > 0 ? "" : "none";
+
+    if (items.length === 0) {
+      lastRenderedIds = "";
+      itemsList.innerHTML = `
+        <div class="flex flex-col items-center justify-center h-full text-center py-16 gap-3">
+          <svg xmlns="http://www.w3.org/2000/svg" width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="color:#d1d5db">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+            <path d="M6 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>
+            <path d="M17 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>
+            <path d="M17 17h-11v-14h-2"/>
+            <path d="M6 5l14 1l-1 7h-13"/>
+          </svg>
+          <p style="font-weight:600;color:#9ca3af">Tu carrito está vacío</p>
+          <p style="font-size:0.875rem;color:#d1d5db">Agregá servicios desde la página principal</p>
+        </div>
+      `;
+      return;
+    }
+
+    // Si la lista de IDs no cambió, no re-renderizo (preserva foco/valor de inputs)
+    const ids = items.map((it) => it.id).join(",");
+    if (ids === lastRenderedIds) return;
+    lastRenderedIds = ids;
+
+    itemsList.innerHTML = items
+      .map((item) => {
+        const img = getItemImage(item);
+        const avatar = img
+          ? `<img src="${escapeHtml(img)}" alt="${escapeHtml(item.servicio)}" loading="lazy"
+                  style="width:40px;height:40px;border-radius:0.6rem;object-fit:contain;background:#EBF3FF;padding:3px;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(55,125,236,0.15)" />`
+          : `<div style="width:40px;height:40px;border-radius:0.6rem;background:#EBF3FF;display:flex;align-items:center;justify-content:center;color:#377DEC;font-weight:700;font-size:0.95rem;flex-shrink:0">
+                ${escapeHtml((item.servicio || "?").charAt(0).toUpperCase())}
+             </div>`;
+        return `
+      <div class="bg-white rounded-xl p-3 shadow-sm border border-gray-100" data-item-id="${item.id}">
+        <div class="flex items-start justify-between gap-3 mb-2.5">
+          <div class="flex items-center gap-3 min-w-0">
+            ${avatar}
+            <div class="min-w-0">
+              <p style="font-weight:600;color:#1f2937;font-size:0.875rem" class="truncate">${escapeHtml(item.servicio)}</p>
+              <p style="font-size:0.75rem;color:#9ca3af">Servicio de mandado</p>
+            </div>
+          </div>
+          <button
+            class="remove-item-btn"
+            data-id="${item.id}"
+            aria-label="Quitar ${escapeHtml(item.servicio)}"
+            style="padding:6px;border-radius:8px;color:#d1d5db;transition:all 0.15s;flex-shrink:0;cursor:pointer;background:transparent;border:none"
+            onmouseenter="this.style.color='#ef4444';this.style.background='#fef2f2'"
+            onmouseleave="this.style.color='#d1d5db';this.style.background='transparent'"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 6L6 18"/>
+              <path d="M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:0.5rem">
+          <label style="display:block">
+            <span style="font-size:0.7rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.04em">Descripción del pedido</span>
+            <textarea
+              class="cart-desc"
+              data-id="${item.id}"
+              rows="2"
+              placeholder="Describí qué necesitás (ej: 2 cocas de 2.25L, pan lactal Bimbo)"
+              style="margin-top:0.25rem;width:100%;padding:0.5rem 0.65rem;border:1px solid #e5e7eb;border-radius:0.5rem;outline:none;font-size:0.8rem;resize:none;min-height:42px;max-height:160px;overflow-y:auto;font-family:inherit;background:#f9fafb;box-sizing:border-box"
+              onfocus="this.style.borderColor='#377DEC';this.style.background='#fff'"
+              onblur="this.style.borderColor='#e5e7eb';this.style.background='#f9fafb'"
+            >${escapeHtml(item.descripcion || "")}</textarea>
+          </label>
+
+          <label style="display:block">
+            <span style="font-size:0.7rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.04em">Negocio / Lugar</span>
+            <div style="margin-top:0.25rem;position:relative">
+              <span style="position:absolute;left:0.55rem;top:50%;transform:translateY(-50%);color:#9ca3af;display:flex;align-items:center;pointer-events:none">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                  <path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/>
+                  <path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z"/>
+                </svg>
+              </span>
+              <input
+                type="text"
+                class="cart-negocio"
+                data-id="${item.id}"
+                placeholder="¿De qué negocio? (ej: Supermercado Día, Farmacia San Miguel)"
+                value="${escapeHtml(item.negocio || "")}"
+                style="width:100%;padding:0.5rem 0.65rem 0.5rem 1.85rem;border:1px solid #e5e7eb;border-radius:0.5rem;outline:none;font-size:0.8rem;background:#f9fafb;box-sizing:border-box"
+                onfocus="this.style.borderColor='#377DEC';this.style.background='#fff'"
+                onblur="this.style.borderColor='#e5e7eb';this.style.background='#f9fafb'"
+              />
+            </div>
+          </label>
+        </div>
+      </div>
+    `;
+      })
+      .join("");
+
+    // Listeners
+    itemsList.querySelectorAll(".remove-item-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        removeItem(btn.dataset.id);
+      });
+    });
+
+    itemsList.querySelectorAll(".cart-desc").forEach((ta) => {
+      autoResize(ta);
+      ta.addEventListener("input", () => {
+        autoResize(ta);
+        updateItem(ta.dataset.id, { descripcion: ta.value });
+      });
+    });
+
+    itemsList.querySelectorAll(".cart-negocio").forEach((inp) => {
+      inp.addEventListener("input", () => {
+        updateItem(inp.dataset.id, { negocio: inp.value });
+      });
+    });
+  }
+
+  toggle?.addEventListener("click", openDrawer);
+  closeBtn?.addEventListener("click", closeDrawer);
+  overlay?.addEventListener("click", closeDrawer);
+  clearBtn?.addEventListener("click", () => {
+    if (getItems().length > 0) clear();
+  });
+
+  subscribe(renderItems);
+  renderItems();
+</script>

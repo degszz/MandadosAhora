@@ -1,46 +1,5 @@
 ---
-const Links = [
-    {
-        name: "Mercado",
-        link: "/mercado",
-    },
-    {
-        name: "Farmacia",
-        link: "/farmacia",
-    },
-    {
-        name: "Carniceria",
-        link: "/carniceria",
-    },
-    {
-        name: "24 Horas",
-        link: "/24horas",
-    },
-    {
-        name: "Verduleria",
-        link: "/verduleria",
-    },
-    {
-        name: "Libreria",
-        link: "/libreria",
-    },
-    {
-        name: "Licoreria",
-        link: "/licoreria",
-    },
-    {
-        name: "Lavanderia",
-        link: "/lavanderia",
-    },
-    {
-        name: "Panaderia",
-        link: "/panaderia",
-    },
-    {
-        name: "Más",
-        link: "/mas",
-    },
-];
+import { SERVICIOS } from "../data/servicios.js";
 import "../styles/global.css";
 ---
 
@@ -99,39 +58,11 @@ import "../styles/global.css";
             class="bg-[#F3F5F6] z-[1001] animate-slide-in-bottom animate-duration-medium w-[100vw] md:w-[100vw] h-[calc(100vh-9px)] lg:hidden left-0 top-[350px] flex justify-center px-6 absolute font-medium md:mt-0 pt-4"
         >
             <div
-                class="flex justify-around h-full min-w-[85vw] w-full text-start"
+                class="flex flex-col sm:flex-row gap-2 h-full min-w-[85vw] w-full text-start overflow-y-auto pb-6"
             >
-                <ul class="w-full mb-2">
-                    <h3 class="mt-2"><b>Dashboard:</b></h3>
+                <h3 class="mt-1"><b>Redes:</b></h3>
+                <ul class="w-full flex sm:w-1/2 mb-1">
 
-                    <li class="border-l dark:border-white border-black">
-                        <a
-                            href="/"
-                            class="menu-link hover:underline text-start btn block py-2 pl-3 dark:text-white dark:hover:text-kai-text rounded hover:text-kai-text"
-                        >
-                            Inicio
-                        </a>
-                    </li>
-
-                    <li class="border-l dark:border-white border-black">
-                        <a
-                            href="#servicios"
-                            class="menu-link hover:underline text-start btn block py-2 pl-3 dark:text-white dark:hover:text-kai-text rounded hover:text-kai-text"
-                            target="_top"
-                        >
-                            Servicios
-                        </a>
-                    </li>
-
-                    <li class="border-l dark:border-white border-black">
-                        <a
-                            href="#informacion"
-                            class="menu-link hover:underline text-start btn block py-2 pl-3 dark:text-white dark:hover:text-kai-text rounded hover:text-kai-text"
-                            target="_top"
-                        >
-                            Sobre Nosotros
-                        </a>
-                    </li>
                     <li>
                         <div
                             class="flex pr-5 items-center justify-around max-w-[200px] text-center h-full"
@@ -224,29 +155,52 @@ import "../styles/global.css";
                                             d="M3 21l1.65 -3.8a9 9 0 1 1 3.4 2.9l-5.05 .9"
                                         ></path><path
                                             d="M9 10a.5 .5 0 0 0 1 0v-1a.5 .5 0 0 0 -1 0v1a5 5 0 0 0 5 5h1a.5 .5 0 0 0 0 -1h-1a.5 .5 0 0 0 0 1"
-                                        ></path></svg>
+                                        ></path></svg
+                                    >
                                 </div>
                             </a>
                         </div>
                     </li>
                 </ul>
 
-                <ul class="w-full mb-2">
+                <div class="w-full sm:w-1/2 mb-2">
                     <h3 class="mt-2"><b>Servicios:</b></h3>
-
-                    {
-                        Links.map((link) => (
-                            <li class="">
-                                <a
-                                    href={`/servicios${link.link}`}
-                                    class="menu-link hover:underline text-start btn block pt-2 pl-3 dark:text-white dark:hover:text-kai-text rounded hover:text-kai-text"
+                    <div class="grid grid-cols-5 sm:grid-cols-5 gap-2 mt-2">
+                        {
+                            SERVICIOS.map((s, i) => (
+                                <button
+                                    type="button"
+                                    data-service-slug={s.slug}
+                                    class="menu-link group relative flex flex-col items-center justify-between
+                                           aspect-square
+                                           rounded-md border border-white/60
+                                           bg-gradient-to-br from-white/95 via-white/80 to-white/60
+                                           backdrop-blur-sm shadow-sm
+                                           hover:shadow-md hover:scale-[1.08]
+                                           active:scale-95
+                                           transition-all duration-200 ease-out
+                                           animate-fade-in-up cursor-pointer"
+                                    style={`animation-delay: ${Math.min(i * 25, 250)}ms; animation-fill-mode: both;`}
                                 >
-                                    {link.name}
-                                </a>
-                            </li>
-                        ))
-                    }
-                </ul>
+                                    <div
+                                        class={`absolute inset-0 rounded-md opacity-15 group-hover:opacity-35 transition-opacity duration-300 ${s.gradient}`}
+                                    />
+                                    <div class="relative z-10 flex-1 flex items-center justify-center w-full">
+                                        <img
+                                            src={s.imagen}
+                                            alt={s.alt}
+                                            loading="lazy"
+                                            class="w-[70px] aspect-square object-contain
+                                                   transition-transform duration-300 ease-out
+                                                   group-hover:scale-110 group-hover:-rotate-6"
+                                        />
+                                    </div>
+
+                                </button>
+                            ))
+                        }
+                    </div>
+                </div>
             </div>
         </div>
     </div>

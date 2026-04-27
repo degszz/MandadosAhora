@@ -1,0 +1,58 @@
+---
+interface Props {
+  servicio: string;
+  slug: string;
+  imagen: string;
+  alt: string;
+  titulo?: string;
+  gradient: string;
+  index?: number;
+}
+
+const {
+  slug,
+  imagen,
+  alt,
+  servicio,
+  titulo = servicio,
+  gradient,
+  index = 0,
+} = Astro.props;
+
+const delay = `${Math.min(index * 70, 700)}ms`;
+---
+
+<button
+  type="button"
+  data-service-slug={slug}
+  data-reveal
+  style={`animation-delay: ${delay}; animation-fill-mode: both;`}
+  class="group relative flex flex-col items-center justify-between
+         w-full aspect-square p-2 sm:p-3
+         rounded-2xl border border-white/60
+         bg-gradient-to-br from-white/95 via-white/80 to-white/60
+         backdrop-blur-sm shadow-md opacity-0
+         hover:shadow-2xl hover:scale-[1.04] hover:-translate-y-1
+         active:scale-95
+         transition-all duration-300 ease-out
+         text-left cursor-pointer"
+>
+  <div class={`absolute inset-0 rounded-2xl opacity-15 group-hover:opacity-35 transition-opacity duration-300 pointer-events-none ${gradient}`}></div>
+
+  <div class="relative z-10 flex-1 flex items-center justify-center w-full pt-1 pointer-events-none">
+    <img
+      src={imagen}
+      alt={alt}
+      class="w-3/4 max-w-[110px] aspect-square object-contain drop-shadow-xl
+             transition-transform duration-300 ease-out
+             group-hover:scale-110 group-hover:-rotate-6"
+      loading="lazy"
+    />
+  </div>
+
+  <p class="relative z-10 mt-1 text-xs sm:text-sm md:text-base font-bold text-gray-800
+            text-center px-1 leading-tight
+            group-hover:text-[#377DEC] transition-colors duration-200">
+    {titulo}
+  </p>
+</button>

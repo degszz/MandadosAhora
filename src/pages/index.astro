@@ -2,349 +2,261 @@
 import Layout from "../layouts/Layout.astro";
 import "../styles/global.css";
 import Carouselchill from "../components/Carouselchill.astro";
+import AudioRecorder from "../components/AudioRecorder.jsx";
+import ServiceCard from "../components/ServiceCard.astro";
+import { SERVICIOS } from "../data/servicios.js";
+
+const ORBITAL_SLUGS = ["mercado", "farmacia", "carniceria", "panaderia", "verduleria"];
+const ORBITAL = ORBITAL_SLUGS
+  .map((slug) => SERVICIOS.find((s) => s.slug === slug))
+  .filter(Boolean);
 ---
 
 <Layout>
 	<body class="h-full w-full flex flex-col justify-center items-center">
-		<div
-			class="w-full lg:min-w-[800px] mt-8 py-9 flex flex-col md:flex-row justify-center items-center md:items-center animate-fade-in animate-delay-200 animate-duration-slow"
+		<section
+			class="hero-section relative w-full overflow-hidden  px-4 py-1 md:py-16 lg:py-20 "
 		>
-			<div class="text-start max-w-[280px] md:max-w-[400px]">
-				<div class="">
-					<h1 class="text-3xl text-dark font-sans">
-						<b>Mandados Ahora</b>
+			<div
+				class="max-w-6xl mx-auto grid md:grid-cols-2 gap-10 md:gap-8 items-center"
+			>
+				<!-- Columna izquierda -->
+				<div class="flex flex-col items-start gap-2 md:gap-6">
+					<span
+						class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-sky-100/70 backdrop-blur border border-sky-200/80 text-sky-900 text-xs sm:text-sm font-medium animate-fade-in-down animate-duration-slow"
+					>
+						<span class="relative inline-flex w-2 h-2">
+							<span
+								class="absolute inset-0 rounded-full bg-green-500"
+							></span>
+							<span
+								class="absolute inset-0 rounded-full bg-green-500 animate-ping opacity-75"
+							></span>
+						</span>
+						San Miguel del Monte · Online ahora
+					</span>
+
+					<h1
+						class="text-3xl md:text-6xl lg:text-7xl font-extrabold leading-[1.05] tracking-tight animate-fade-in-up animate-delay-200 animate-duration-slow"
+						style="font-family: 'Inter', system-ui, sans-serif;"
+					>
+						<span class="block text-[#0b0e14]"
+							>Pedí lo que necesites,</span
+						>
+						<span class="block text-[#2563eb]">te lo llevamos.</span>
 					</h1>
-					<p class="text-md">
-						Ofrecemos a nuestros clientes la comodidad de <b
-							>recibir sus productos directamente en la puerta de
-							su hogar en
-						</b>
-						<b class="text-[#377DEC]">San Miguel del Monte.</b>
+
+					<p
+						class="text-base md:text-lg text-gray-600 max-w-md animate-fade-in-up animate-delay-400 animate-duration-slow"
+					>
+						Súper, farmacia, carnicería y mucho más. Hacé tu mandado
+						desde casa y te lo llevamos a la puerta.
+						<b class="text-gray-800">Sin vueltas.</b>
 					</p>
+
+					<div
+						class="flex sm:flex-row w-full max-w-md animate-fade-in-up animate-delay-600 animate-duration-slow"
+					>
+						<a
+							href="#servicios"
+							class="inline-flex items-center justify-center gap-2 bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-semibold px-3 mx-1 py-2 rounded-xl shadow-lg shadow-blue-500/30 transition-all duration-200 hover:scale-[1.02] active:scale-95"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2.5"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<path d="M12 5v14"></path>
+								<path d="M5 12h14"></path>
+							</svg>
+							Empezar pedido
+						</a>
+						<a
+							href="https://wa.me/2271415182"
+							target="_blank"
+							rel="noopener"
+							class="inline-flex items-center justify-center gap-2 bg-white hover:bg-gray-50 border border-gray-300 text-gray-800 font-semibold px-3 py-2 rounded-xl shadow transition-all duration-200 hover:scale-[1.02] active:scale-95"
+						>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="18"
+								height="18"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="#25D366"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<path
+									stroke="none"
+									d="M0 0h24v24H0z"
+									fill="none"></path>
+								<path
+									d="M3 21l1.65 -3.8a9 9 0 1 1 3.4 2.9l-5.05 .9"
+								></path>
+								<path
+									d="M9 10a.5 .5 0 0 0 1 0v-1a.5 .5 0 0 0 -1 0v1a5 5 0 0 0 5 5h1a.5 .5 0 0 0 0 -1h-1a.5 .5 0 0 0 0 1"
+								></path>
+							</svg>
+							WhatsApp
+						</a>
+					</div>
+
+					<div
+						class="grid grid-cols-3 gap-3 md:gap-6  w-full max-w-md animate-fade-in-up animate-delay-800 animate-duration-slow"
+					>
+						<div>
+							<div
+								class="text-2xl md:text-3xl font-extrabold text-[#2563eb]"
+							>
+								30 min
+							</div>
+							<div class="text-xs md:text-sm text-gray-500">
+								Entrega promedio
+							</div>
+						</div>
+						<div>
+							<div
+								class="text-2xl md:text-3xl font-extrabold text-[#2563eb]"
+							>
+								14
+							</div>
+							<div class="text-xs md:text-sm text-gray-500">
+								Rubros
+							</div>
+						</div>
+						<div>
+							<div
+								class="text-2xl md:text-3xl font-extrabold text-[#2563eb]"
+							>
+								4.9★
+							</div>
+							<div class="text-xs md:text-sm text-gray-500">
+								Calificación
+							</div>
+						</div>
+					</div>
 				</div>
-				<div class="w-full flex items-center justify-start my-2">
-					<a
-						href="#servicios"
-						class="bg-[#67a7f3] hover:bg-[#377DEC] text-white
-						mr-2 mb-2 px-2.5 py-1.5
-						 font-medium text-center
-						justify-center inline-flex items-center flex-row
-						rounded-lg border gap-x-2 opacity-90
-						cursor-pointer hover:bg-kai-hover dark:bg-kai-hover dark:hover:bg-kai-bg hover:text-white
-						hover:opacity-100 hover:bg-black-600
-						hover:scale-110 hover:shadow-lg
-						dark:focus:ring-black-300
-						focus:ring-2 focus:outline-none focus:ring-black-30
-						transition-all duration-200 ease-in-out scale-90"
+
+				<!-- Columna derecha: círculo orbital -->
+				<div
+					class="hero-orbit-container relative flex justify-center items-center animate-zoom-in animate-delay-500 animate-duration-slow"
+				>
+					<div
+						class="relative w-[300px] h-[300px] md:w-[450px] md:h-[450px]"
 					>
-						Servicios
-					</a>
-					<a
-						href="https://www.facebook.com/profile.php?id=61584653608264"
-						class="bg-[#67a7f3] hover:bg-[#377DEC]
-						mr-2 mb-2 px-2.5 py-1.5
-						 font-medium text-center
-						justify-center inline-flex items-center flex-row
-						rounded-lg border gap-x-2 opacity-90
-						cursor-pointer hover:bg-kai-hover dark:bg-kai-hover dark:hover:bg-kai-bg hover:text-white
-						hover:opacity-100 hover:bg-black-600
-						hover:scale-110 hover:shadow-lg
-						dark:focus:ring-black-300
-						focus:ring-2 focus:outline-none focus:ring-black-30
-						transition-all duration-200 ease-in-out scale-90"
-						target="_blank"
-						><svg
-							xmlns="http://www.w3.org/2000/svg"
-							width="24"
-							height="24"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="#fff"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							class="icon icon-tabler icons-tabler-outline icon-tabler-brand-facebook"
-							><path stroke="none" d="M0 0h24v24H0z" fill="none"
-							></path><path
-								d="M7 10v4h3v7h4v-7h3l1 -4h-4v-2a1 1 0 0 1 1 -1h3v-4h-3a5 5 0 0 0 -5 5v2h-3"
-							></path></svg
-						></a
-					>
-					<a
-						href="https://www.instagram.com/mandadosahora/"
-						class="bg-[#67a7f3] hover:bg-[#377DEC]
-						mr-2 mb-2 px-2.5 py-1.5
-						 font-medium text-center
-						justify-center inline-flex items-center flex-row
-						rounded-lg border gap-x-2 opacity-90
-						cursor-pointer dark:bg-kai-hover dark:hover:bg-kai-bg hover:bg-kai-hover hover:text-white
-						hover:opacity-100 hover:bg-black-600
-						hover:scale-110 hover:shadow-lg
-						dark:focus:ring-black-300
-						focus:ring-2 focus:outline-none focus:ring-black-30
-						transition-all duration-200 ease-in-out scale-90"
-						target="_blank"
-						><svg
-							xmlns="http://www.w3.org/2000/svg"
-							width="24"
-							height="24"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="#fff"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							class="icon icon-tabler icons-tabler-outline icon-tabler-brand-instagram"
-							><path stroke="none" d="M0 0h24v24H0z" fill="none"
-							></path><path
-								d="M4 8a4 4 0 0 1 4 -4h8a4 4 0 0 1 4 4v8a4 4 0 0 1 -4 4h-8a4 4 0 0 1 -4 -4z"
-							></path><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"
-							></path><path d="M16.5 7.5v.01"></path></svg
-						></a
-					>
-					<a
-						href="https://www.instagram.com/mandadosahora/"
-						class="bg-[#67a7f3] hover:bg-[#377DEC]
-						mr-2 mb-2 px-2.5 py-1.5
-						 font-medium text-center
-						justify-center inline-flex items-center flex-row
-						rounded-lg border gap-x-2 opacity-90
-						cursor-pointer dark:bg-kai-hover dark:hover:bg-kai-bg hover:bg-kai-hover hover:text-white
-						hover:opacity-100 hover:bg-black-600
-						hover:scale-110 hover:shadow-lg
-						dark:focus:ring-black-300
-						focus:ring-2 focus:outline-none focus:ring-black-30
-						transition-all duration-200 ease-in-out scale-90"
-						target="_blank"
-						><svg
-							xmlns="http://www.w3.org/2000/svg"
-							width="24"
-							height="24"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="#fff"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							class="icon icon-tabler icons-tabler-outline icon-tabler-brand-whatsapp"
-							><path stroke="none" d="M0 0h24v24H0z" fill="none"
-							></path><path
-								d="M3 21l1.65 -3.8a9 9 0 1 1 3.4 2.9l-5.05 .9"
-							></path><path
-								d="M9 10a.5 .5 0 0 0 1 0v-1a.5 .5 0 0 0 -1 0v1a5 5 0 0 0 5 5h1a.5 .5 0 0 0 0 -1h-1a.5 .5 0 0 0 0 1"
-							></path></svg
-						></a
-					>
+						<!-- Anillos decorativos -->
+						<div
+							class="absolute inset-0 rounded-full border border-sky-200/80"
+						></div>
+						<div
+							class="absolute inset-6 rounded-full border border-sky-200/50"
+						></div>
+						<div
+							class="absolute inset-14 rounded-full border border-sky-100"
+						></div>
+
+						<!-- Centro: ícono que rota cada 4s (todo el bloque clickeable) -->
+						<div
+							class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10"
+						>
+							<button
+								id="hero-center-btn"
+								type="button"
+								class="pointer-events-auto cursor-pointer flex flex-col items-center transition-transform duration-200 hover:scale-105 active:scale-95"
+								data-service-slug="mercado"
+								aria-label="Pedir Mercado"
+							>
+								<img
+									id="hero-center-img"
+									src="/shop.avif"
+									alt="Mercado"
+									class="w-32 h-32 md:w-44 md:h-44 object-contain drop-shadow-2xl transition-opacity duration-500"
+								/>
+								<span
+									id="hero-center-chip"
+									class="mt-2 px-4 py-1 bg-white rounded-full shadow-md border border-sky-100 text-sm md:text-base font-bold text-gray-800 transition-opacity duration-500"
+								>
+									Mercado
+								</span>
+							</button>
+						</div>
+
+						<!-- Anillo orbital: 5 íconos clickeables -->
+						<div class="hero-orbit-ring absolute inset-0 z-[5]">
+							{
+								ORBITAL.map((s, i) => (
+									<button
+										type="button"
+										data-service-slug={s.slug}
+										class="hero-orbit-btn group"
+										style={`--orbit-angle: ${(360 / ORBITAL.length) * i}deg;`}
+										aria-label={`Pedir ${s.titulo ?? s.servicio}`}
+									>
+										<img
+											src={s.imagen}
+											alt={s.alt || s.servicio}
+											loading="lazy"
+											class="hero-orbit-img w-14 h-14 md:w-20 md:h-20 object-contain drop-shadow-xl pointer-events-none"
+										/>
+									</button>
+								))
+							}
+						</div>
+
+						<!-- Badge "30 min promedio" -->
+						<div
+							class="absolute bottom-1 right-[70px] md:bottom-3 md:right-3 z-20 bg-green-500 text-white text-xs md:text-sm font-bold px-3 py-2 rounded-full  flex items-center gap-1.5 animate-bounce animate-duration-slower"
+						>
+							<span>⚡</span>
+							30 min promedio
+						</div>
+					</div>
 				</div>
 			</div>
-			<div class="w-fit md:w-fit flex justify-center mt-8">
-				<img
-					src="/o.avif"
-					class="w-[150px] md:w-[250px] md:h-[250px]
-							animate-shake animate-infinite animate-duration-[1500ms] animate-delay-0"
-					alt="Carrito"
-				/>
-			</div>
-		</div>
+		</section>
 		<br id="servicios" class="" />
-		<div class="flex flex-col justify-center mt-9 items-center">
+		<div class="flex flex-col justify-center mt-9 items-center w-full px-3">
 			<h2
-				class="text-start text-2xl underline mb-2 max-w-[350px] md:w-full md:min-w-[450px]"
+				class="text-center md:text-start text-4xl underline mb-4  md:w-full  lg:max-w-[1100px]"
 			>
 				<b>Servicios:</b>
 			</h2>
 			<div
-				class="style-none list-disc grid grid-cols-3 md:grid-cols-4 w-fit text-md text-serif dark:text-white"
+				class="grid grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 w-full max-w-[1100px] text-md text-serif dark:text-white"
 			>
-				<a href="/servicios/mercado" class="w-fit flex flex-col group">
-					<div
-						class="relative hover:cursor-pointer hover:scale-105 hover:contrast-125 transition z-10 col-span-2 min-h-[100px] min-w-[100px] overflow-hidden bg-gradient-to-br from-[#F4D992] via-[#eec15b] to-[#eaaa35] p-2 w-fit border rounded-lg m-2"
-					>
-						<img
-							src="/shop.avif"
-							class="absolute -rotate-6 size-28 md:size-40 z-20 group-hover:-rotate-12 group-hover:scale-125 transition-transform"
-							width={50}
-							height={50}
-							alt="Mercado"
-						/>
-					</div>
-					<p class="text-black text-lg text-center">
-						<b class="group-hover:underline">Mercado</b>
-					</p>
-				</a>
-				<a href="/servicios/farmacia" class="w-fit flex flex-col group">
-					<div
-						class="relative hover:cursor-pointer hover:scale-105 hover:contrast-125 transition z-10 col-span-2 min-h-[100px] min-w-[100px] overflow-hidden bg-gradient-to-br from-[#42a838] via-[#348e2b] to-[#2b7025] p-2 w-fit border rounded-lg m-2"
-					>
-						<img
-							src="/farmacia.avif"
-							class="absolute -rotate-6 size-28 md:size-40 z-20 group-hover:-rotate-12 group-hover:scale-125 transition-transform"
-							width={50}
-							height={50}
-							alt="Farmacia"
-						/>
-					</div>
-					<p class="text-black text-lg text-center">
-						<b class="group-hover:underline">Farmacia</b>
-					</p>
-				</a>
-				<a
-					href="/servicios/carniceria"
-					class="w-fit flex flex-col group"
+				{SERVICIOS.map((s, i) => <ServiceCard {...s} index={i} />)}
+
+				<!-- Próximo (placeholder) -->
+				<div
+					data-reveal
+					style={`animation-delay: ${Math.min(15 * 70, 700)}ms; animation-fill-mode: both;`}
+					class="group relative flex flex-col items-center justify-between
+					       w-full aspect-square p-2 sm:p-3
+					       rounded-2xl border border-white/60
+					       bg-gradient-to-br from-white/95 via-white/80 to-white/60
+					       backdrop-blur-sm shadow-md opacity-0
+					       cursor-not-allowed"
+					aria-disabled="true"
 				>
-					<div
-						class="relative hover:cursor-pointer hover:scale-105 hover:contrast-125 transition z-10 col-span-2 min-h-[100px] min-w-[100px] overflow-hidden bg-gradient-to-br from-[#e43e33] via-[#f44a3f] to-[#fc766d] p-2 w-fit border rounded-lg m-2"
-					>
-						<img
-							src="/meat.avif"
-							class="absolute -rotate-6 size-28 md:size-40 z-20 group-hover:-rotate-12 group-hover:scale-125 transition-transform"
-							width={50}
-							height={50}
-							alt="Carniceria"
-						/>
-					</div>
-					<p class="text-black text-lg text-center">
-						<b class="group-hover:underline">Carniceria</b>
-					</p>
-				</a>
-				<a href="/servicios/24horas" class="w-fit flex flex-col group">
-					<div
-						class="relative hover:cursor-pointer hover:scale-105 hover:contrast-125 transition z-10 col-span-2 min-h-[100px] min-w-[100px] overflow-hidden bg-gradient-to-br from-[#3ad5ff] via-[#1ac4f6] to-[#00a7dc] p-2 w-fit border rounded-lg m-2"
-					>
-						<img
-							src="/24.avif"
-							class="absolute -rotate-6 size-28 md:size-40 z-20 group-hover:-rotate-12 group-hover:scale-125 transition-transform"
-							width={50}
-							height={50}
-							alt="24 Horas"
-						/>
-					</div>
-					<p class="text-black text-lg text-center">
-						<b class="group-hover:underline">24 Horas</b>
-					</p>
-				</a>
-				<a
-					href="/servicios/verduleria"
-					class="w-fit flex flex-col group"
-				>
-					<div
-						class="relative hover:cursor-pointer hover:scale-105 hover:contrast-125 transition z-10 col-span-2 min-h-[100px] min-w-[100px] overflow-hidden bg-gradient-to-br from-[#42a838] via-[#348e2b] to-[#2b7025] p-2 w-fit border rounded-lg m-2"
-					>
-						<img
-							src="/verduleria.avif"
-							class="absolute -rotate-6 size-28 md:size-40 z-20 group-hover:-rotate-12 group-hover:scale-125 transition-transform"
-							width={50}
-							height={50}
-							alt="Verduleria"
-						/>
-					</div>
-					<p class="text-black text-lg text-center">
-						<b class="group-hover:underline">Verduleria</b>
-					</p>
-				</a>
-				<a href="/servicios/libreria" class="w-fit flex flex-col group">
-					<div
-						class="relative hover:cursor-pointer hover:scale-105 hover:contrast-125 transition z-10 col-span-2 min-h-[100px] min-w-[100px] overflow-hidden bg-gradient-to-br from-[#bea78e] via-[#ccbca5] to-[#e0d7c8] p-2 w-fit border rounded-lg m-2"
-					>
-						<img
-							src="/utiles.avif"
-							class="absolute -rotate-6 size-28 md:size-40 z-20 group-hover:-rotate-12 group-hover:scale-125 transition-transform"
-							width={50}
-							height={50}
-							alt="Libreria"
-						/>
-					</div>
-					<p class="text-black text-lg text-center">
-						<b class="group-hover:underline">Libreria</b>
-					</p>
-				</a>
-				<a
-					href="/servicios/licoreria"
-					class="w-fit flex flex-col group"
-				>
-					<div
-						class="relative hover:cursor-pointer hover:scale-105 hover:contrast-125 transition z-10 col-span-2 min-h-[100px] min-w-[100px] overflow-hidden bg-gradient-to-br from-[#e14715] via-[#f0611f] to-[#f38244] p-2 w-fit border rounded-lg m-2"
-					>
-						<img
-							src="/licor.avif"
-							class="absolute -rotate-6 size-28 md:size-40 z-20 group-hover:-rotate-12 group-hover:scale-125 transition-transform"
-							width={50}
-							height={50}
-							alt="Licoreria"
-						/>
-					</div>
-					<p class="text-black text-lg text-center">
-						<b class="group-hover:underline">Licoreria</b>
-					</p>
-				</a>
-				<a
-					href="/servicios/lavanderia"
-					class="w-fit flex flex-col group"
-				>
-					<div
-						class="relative hover:cursor-pointer hover:scale-105 hover:contrast-125 transition z-10 col-span-2 min-h-[100px] min-w-[100px] overflow-hidden bg-gradient-to-br from-[#e14715] via-[#f0611f] to-[#f38244] p-2 w-fit border rounded-lg m-2"
-					>
-						<img
-							src="/limpieza.avif"
-							class="absolute -rotate-6 size-28 md:size-40 z-20 group-hover:-rotate-12 group-hover:scale-125 transition-transform"
-							width={50}
-							height={50}
-							alt="Limpieza"
-						/>
-					</div>
-					<p class="text-black text-lg text-center">
-						<b class="group-hover:underline">Lavanderia</b>
-					</p>
-				</a>
-				<a
-					href="/servicios/panaderia"
-					class="w-fit flex flex-col group"
-				>
-					<div
-						class="relative hover:cursor-pointer hover:scale-105 hover:contrast-125 transition z-10 col-span-2 min-h-[100px] min-w-[100px] overflow-hidden bg-gradient-to-br from-[#ee4e00] via-[#ff6d0a] to-[#ff8e32] p-2 w-fit border rounded-lg m-2"
-					>
-						<img
-							src="/pan.avif"
-							class="absolute -rotate-6 size-28 md:size-40 z-20 group-hover:-rotate-12 group-hover:scale-125 transition-transform"
-							width={50}
-							height={50}
-							alt="Panaderia"
-						/>
-					</div>
-					<p class="text-black text-lg text-center">
-						<b class="group-hover:underline">Panaderia</b>
-					</p>
-				</a>
-				<a href="/servicios/mas" class="w-fit flex flex-col group">
-					<div
-						class="relative hover:cursor-pointer hover:scale-105 hover:contrast-125 transition z-10 col-span-2 min-h-[100px] min-w-[100px] overflow-hidden bg-gradient-to-br from-[#0c77ed] via-[#138efd] to-[#2aabff] p-2 w-fit border rounded-lg m-2"
-					>
-						<img
-							src="/more.avif"
-							class="absolute -rotate-6 size-28 md:size-40 z-20 group-hover:-rotate-12 group-hover:scale-125 transition-transform"
-							width={50}
-							height={50}
-							alt="Mas"
-						/>
-					</div>
-					<p class="text-black text-lg text-center">
-						<b class="group-hover:underline">Más</b>
-					</p>
-				</a>
-				<div class="w-fit flex flex-col group">
-					<div
-						class="relative hover:cursor-pointer hover:scale-105 hover:contrast-125 transition z-10 col-span-2 min-h-[100px] min-w-[100px] overflow-hidden bg-gradient-to-br from-[#474d57] blur-[4px] via-[#535c67] to-[#616d79] p-2 w-fit border rounded-lg m-2"
-					>
+					<div class="absolute inset-0 rounded-2xl opacity-15 bg-gradient-to-br from-[#474d57] via-[#535c67] to-[#616d79]"></div>
+					<div class="relative z-10 flex-1 flex items-center justify-center w-full pt-1">
 						<img
 							src="/burger.avif"
-							class="absolute -rotate-6 size-28 md:size-40 z-20 group-hover:-rotate-12 group-hover:scale-125 transition-transform"
-							width={50}
-							height={50}
-							alt="Mas"
+							alt="Próximo"
+							class="w-3/4 max-w-[110px] aspect-square object-contain drop-shadow-xl grayscale opacity-70 blur-[1px]"
+							loading="lazy"
 						/>
 					</div>
-					<p class="text-black text-lg text-center">
-						<b class="group-hover:underline">Proximo</b>
+					<p class="relative z-10 mt-1 text-xs sm:text-sm md:text-base font-bold text-gray-500 text-center px-1 leading-tight">
+						Próximamente
 					</p>
 				</div>
 			</div>
@@ -512,4 +424,137 @@ import Carouselchill from "../components/Carouselchill.astro";
 			</div>
 		</section>
 	</body>
+	<AudioRecorder client:load />
 </Layout>
+
+<script>
+  const reveal = (el) => {
+    el.classList.remove("opacity-0");
+    el.classList.add("animate-fade-in-up");
+  };
+
+  const els = document.querySelectorAll("[data-reveal]");
+
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            reveal(entry.target);
+            io.unobserve(entry.target);
+          }
+        });
+      },
+      { rootMargin: "0px 0px -10% 0px", threshold: 0.05 }
+    );
+    els.forEach((el) => io.observe(el));
+  } else {
+    els.forEach(reveal);
+  }
+</script>
+
+<script define:vars={{ cycle: SERVICIOS }}>
+  const centerImg = document.getElementById("hero-center-img");
+  const centerChip = document.getElementById("hero-center-chip");
+  const centerBtn = document.getElementById("hero-center-btn");
+
+  if (centerImg && centerChip && centerBtn && cycle.length) {
+    let i = 0;
+    setInterval(() => {
+      i = (i + 1) % cycle.length;
+      const s = cycle[i];
+      centerImg.style.opacity = "0";
+      centerChip.style.opacity = "0";
+      setTimeout(() => {
+        centerImg.src = s.imagen;
+        centerImg.alt = s.alt || s.servicio;
+        centerChip.textContent = s.titulo ?? s.servicio;
+        centerBtn.dataset.serviceSlug = s.slug;
+        centerBtn.setAttribute(
+          "aria-label",
+          `Pedir ${s.titulo ?? s.servicio}`
+        );
+        centerImg.style.opacity = "1";
+        centerChip.style.opacity = "1";
+      }, 250);
+    }, 4000);
+  }
+
+  // Pausar la órbita en mobile cuando se toca el círculo (1.2s)
+  // — facilita el tap sobre íconos en movimiento.
+  const orbitContainer = document.querySelector(".hero-orbit-container");
+  if (orbitContainer) {
+    let touchTimer = null;
+    orbitContainer.addEventListener(
+      "touchstart",
+      () => {
+        orbitContainer.classList.add("is-touched");
+        if (touchTimer) clearTimeout(touchTimer);
+        touchTimer = setTimeout(() => {
+          orbitContainer.classList.remove("is-touched");
+        }, 1200);
+      },
+      { passive: true }
+    );
+  }
+</script>
+
+<style>
+  @keyframes hero-orbit-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes hero-orbit-counter {
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+
+  .hero-orbit-ring {
+    animation: hero-orbit-spin 40s linear infinite;
+    transform-origin: center;
+  }
+
+  .hero-orbit-btn {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 56px;
+    height: 56px;
+    margin: -28px 0 0 -28px;
+    border: none;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+    pointer-events: auto;
+    transform: rotate(var(--orbit-angle)) translateY(-130px)
+      rotate(calc(var(--orbit-angle) * -1));
+  }
+  @media (min-width: 768px) {
+    .hero-orbit-btn {
+      width: 80px;
+      height: 80px;
+      margin: -40px 0 0 -40px;
+      transform: rotate(var(--orbit-angle)) translateY(-195px)
+        rotate(calc(var(--orbit-angle) * -1));
+    }
+  }
+
+  .hero-orbit-img {
+    animation: hero-orbit-counter 40s linear infinite;
+    transform-origin: center;
+    transition: filter 0.2s ease;
+  }
+
+  .hero-orbit-container:hover .hero-orbit-ring,
+  .hero-orbit-container:hover .hero-orbit-img,
+  .hero-orbit-container.is-touched .hero-orbit-ring,
+  .hero-orbit-container.is-touched .hero-orbit-img {
+    animation-play-state: paused;
+  }
+
+  .hero-orbit-btn:hover .hero-orbit-img {
+    filter: drop-shadow(0 0 12px rgba(37, 99, 235, 0.55));
+  }
+</style>

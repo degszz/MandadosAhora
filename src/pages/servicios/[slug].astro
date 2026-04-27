@@ -1,0 +1,471 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { SERVICIOS } from "../../data/servicios.js";
+import { GOOGLE_MAPS_API_KEY, INITIAL_LAT, INITIAL_LNG } from "../../scripts/gmaps.js";
+
+export function getStaticPaths() {
+  return SERVICIOS.map((s) => ({
+    params: { slug: s.slug },
+    props: { servicio: s },
+  }));
+}
+
+const { servicio } = Astro.props;
+const titulo = servicio.titulo ?? servicio.servicio;
+---
+
+<Layout>
+  <div class="w-full flex justify-center my-8 px-4">
+    <div
+      class="w-full max-w-md flex flex-col items-center"
+      data-gmaps-key={GOOGLE_MAPS_API_KEY}
+      data-initial-lat={INITIAL_LAT}
+      data-initial-lng={INITIAL_LNG}
+      id="servicio-root"
+    >
+      <a
+        href="/#servicios"
+        class="self-start mb-4 text-sm text-gray-600 hover:text-[#377DEC] flex items-center gap-1 transition-colors"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 12l14 0"/>
+          <path d="M5 12l6 6"/>
+          <path d="M5 12l6 -6"/>
+        </svg>
+        Volver a servicios
+      </a>
+
+      <div class="w-full flex flex-col items-center group animate-fade-in-up animate-duration-slow">
+        <div
+          class={`relative z-10 min-h-[180px] min-w-[180px] w-full max-w-[260px] overflow-hidden p-2 border rounded-2xl m-2 shadow-lg ${servicio.gradient}`}
+        >
+          <img
+            src={servicio.imagen}
+            class="absolute -rotate-6 left-1/2 -translate-x-1/2 size-44 md:size-52 z-20 transition-transform group-hover:scale-105 group-hover:-rotate-12"
+            alt={servicio.alt}
+          />
+        </div>
+        <h1 class="text-3xl font-bold text-gray-800 text-center mt-2">
+          {titulo}
+        </h1>
+      </div>
+
+      <form
+        id="servicio-form"
+        class="w-full bg-white shadow-lg rounded-2xl p-6 mt-6 space-y-4 border border-gray-100 animate-fade-in-up animate-duration-slow animate-delay-200"
+        style="animation-fill-mode: both;"
+        data-servicio={servicio.servicio}
+        data-slug={servicio.slug}
+        data-imagen={servicio.imagen}
+        data-alt={servicio.alt || servicio.servicio}
+      >
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5" for="nombre">
+            Nombre
+          </label>
+          <input
+            id="nombre"
+            type="text"
+            placeholder="Tu nombre (opcional)"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#377DEC] focus:border-[#377DEC] outline-none"
+          />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5" for="negocio">
+            Sucursal o local
+          </label>
+          <input
+            id="negocio"
+            type="text"
+            placeholder="¿De qué local o sucursal? (ej: Supermercado Día, Farmacia del Centro)"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#377DEC] focus:border-[#377DEC] outline-none"
+          />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5" for="desc">
+            Descripción del pedido
+          </label>
+          <textarea
+            id="desc"
+            rows="4"
+            placeholder="Describí qué necesitás (ej: 2 cocas de 2.25L, pan lactal)"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#377DEC] focus:border-[#377DEC] outline-none resize-none"
+          ></textarea>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">
+            Dirección de entrega
+          </label>
+
+          <div id="dir-tabs" class="inline-flex bg-gray-100 rounded-lg p-1 mb-2" role="tablist">
+            <button
+              type="button"
+              data-tab="manual"
+              class="dir-tab px-3 py-1.5 rounded-md text-sm font-medium bg-white text-[#377DEC] shadow-sm"
+              aria-pressed="true"
+            >
+              ✍️ Escribir
+            </button>
+            <button
+              type="button"
+              data-tab="mapa"
+              class="dir-tab px-3 py-1.5 rounded-md text-sm font-medium text-gray-500 bg-transparent"
+              aria-pressed="false"
+            >
+              📍 En el mapa
+            </button>
+          </div>
+
+          <div id="dir-panel-manual" class="space-y-1">
+            <input
+              id="dir-manual"
+              type="text"
+              placeholder="Calle y número (ej: San Martín 450)"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#377DEC] focus:border-[#377DEC] outline-none"
+            />
+          </div>
+
+          <div id="dir-panel-mapa" class="hidden space-y-2">
+            <button
+              type="button"
+              id="geo-btn"
+              class="w-full bg-[#EBF3FF] text-[#377DEC] border border-[#377DEC]/30 rounded-lg py-2 text-sm font-medium hover:bg-[#dbe9ff] transition-colors flex items-center justify-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v2"/>
+                <path d="M12 20v2"/>
+                <path d="M2 12h2"/>
+                <path d="M20 12h2"/>
+                <circle cx="12" cy="12" r="4"/>
+                <circle cx="12" cy="12" r="9"/>
+              </svg>
+              Usar mi ubicación
+            </button>
+            <div
+              id="map-container"
+              class="w-full h-[240px] rounded-lg border border-gray-200 bg-gray-100 flex items-center justify-center text-sm text-gray-500"
+            >
+              Cargando mapa...
+            </div>
+            <div
+              id="map-address"
+              class="hidden bg-[#EBF3FF] text-[#1e40af] px-3 py-2 rounded-lg text-sm"
+            >
+              <b>Dirección detectada:</b> <span id="map-address-text">—</span>
+            </div>
+            <p class="text-xs text-gray-400">
+              Arrastrá el pin o tocá el mapa para ajustar tu ubicación.
+            </p>
+          </div>
+        </div>
+
+        <p
+          id="form-error"
+          class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2"
+          role="alert"
+          style="display:none"
+        ></p>
+
+        <button
+          type="submit"
+          id="add-btn"
+          class="w-full bg-black  text-white rounded-xl py-3 transition-all duration-150 hover:shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 shadow-md"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>
+            <path d="M17 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>
+            <path d="M17 17h-11v-14h-2"/>
+            <path d="M6 5l14 1l-1 7h-13"/>
+            <path d="M19 7v6"/>
+            <path d="M16 10h6"/>
+          </svg>
+          Agregar al carrito
+        </button>
+
+        <p id="feedback" class="hidden text-center text-sm text-green-600 font-medium"></p>
+      </form>
+
+      <a
+        href="/#servicios"
+        class="mt-4 text-sm text-gray-500 hover:text-[#377DEC] underline transition-colors"
+      >
+        Agregar otro servicio
+      </a>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { addItem } from "../../scripts/cart.js";
+  import { getProfile, setProfile } from "../../scripts/profile.js";
+  import {
+    loadGoogleMaps,
+    reverseGeocode,
+    geolocate,
+    isGmapsConfigured,
+  } from "../../scripts/gmaps.js";
+
+  const root = document.getElementById("servicio-root");
+  const INITIAL_LAT = parseFloat(root.dataset.initialLat);
+  const INITIAL_LNG = parseFloat(root.dataset.initialLng);
+
+  const form = document.getElementById("servicio-form");
+  const nombreEl = document.getElementById("nombre");
+  const negEl = document.getElementById("negocio");
+  const descEl = document.getElementById("desc");
+  const dirManualEl = document.getElementById("dir-manual");
+  const geoBtn = document.getElementById("geo-btn");
+  const mapContainer = document.getElementById("map-container");
+  const mapAddressBox = document.getElementById("map-address");
+  const mapAddressText = document.getElementById("map-address-text");
+  const btn = document.getElementById("add-btn");
+  const feedback = document.getElementById("feedback");
+  const errorEl = document.getElementById("form-error");
+
+  const state = {
+    tab: "manual",
+    map: null,
+    marker: null,
+    geocoder: null,
+    mapLat: null,
+    mapLng: null,
+    mapAddress: "",
+    mapReady: false,
+  };
+
+  // ----- Autocompletar desde profile -----
+  const profile = getProfile();
+  if (profile.nombre) nombreEl.value = profile.nombre;
+  if (profile.direccion) {
+    if (profile.direccion.tipo === "manual" && profile.direccion.texto) {
+      dirManualEl.value = profile.direccion.texto;
+    } else if (profile.direccion.tipo === "mapa" && profile.direccion.address) {
+      // Pre-fill manual con la última dirección detectada para que se pueda editar
+      dirManualEl.value = profile.direccion.address;
+    }
+  }
+
+  // ----- Tabs -----
+  document.querySelectorAll(".dir-tab").forEach((tabBtn) => {
+    tabBtn.addEventListener("click", () => {
+      const tab = tabBtn.dataset.tab;
+      state.tab = tab;
+      document.querySelectorAll(".dir-tab").forEach((b) => {
+        const active = b.dataset.tab === tab;
+        b.setAttribute("aria-pressed", active ? "true" : "false");
+        b.classList.toggle("bg-white", active);
+        b.classList.toggle("text-[#377DEC]", active);
+        b.classList.toggle("shadow-sm", active);
+        b.classList.toggle("text-gray-500", !active);
+        b.classList.toggle("bg-transparent", !active);
+      });
+      document.getElementById("dir-panel-manual").classList.toggle("hidden", tab !== "manual");
+      document.getElementById("dir-panel-mapa").classList.toggle("hidden", tab !== "mapa");
+      if (tab === "mapa" && !state.mapReady) initMap();
+    });
+  });
+
+  // ----- Mapa (lazy: solo cuando se abre el tab) -----
+  function initMap() {
+    state.mapReady = true;
+
+    if (!isGmapsConfigured()) {
+      mapContainer.innerHTML = `
+        <div class="p-4 text-center text-sm text-gray-500">
+          ⚠️ Mapa no disponible.<br>
+          Usá la opción <b>Escribir</b> para ingresar tu dirección.
+        </div>
+      `;
+      return;
+    }
+
+    loadGoogleMaps()
+      .then(() => {
+        mapContainer.innerHTML = "";
+        const center = { lat: INITIAL_LAT, lng: INITIAL_LNG };
+        state.map = new google.maps.Map(mapContainer, {
+          center,
+          zoom: 15,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+        });
+        state.marker = new google.maps.Marker({
+          position: center,
+          map: state.map,
+          draggable: true,
+          title: "Tu ubicación",
+        });
+        state.geocoder = new google.maps.Geocoder();
+
+        state.marker.addListener("dragend", onPinMove);
+        state.map.addListener("click", (e) => {
+          state.marker.setPosition(e.latLng);
+          onPinMove();
+        });
+
+        // Si el profile tenía mapa, restaurar ese punto
+        if (profile.direccion?.tipo === "mapa" && profile.direccion.lat != null) {
+          const p = { lat: profile.direccion.lat, lng: profile.direccion.lng };
+          state.map.setCenter(p);
+          state.marker.setPosition(p);
+        }
+        applyPin();
+      })
+      .catch((err) => {
+        console.warn(err);
+        mapContainer.innerHTML = `
+          <div class="p-4 text-center text-sm text-gray-500">
+            ⚠️ No se pudo cargar el mapa.<br>
+            Usá la opción <b>Escribir</b> para ingresar tu dirección.
+          </div>
+        `;
+      });
+  }
+
+  async function onPinMove() {
+    const pos = state.marker.getPosition();
+    state.mapLat = pos.lat();
+    state.mapLng = pos.lng();
+    state.mapAddress = await reverseGeocode(state.geocoder, state.mapLat, state.mapLng);
+    mapAddressText.textContent = state.mapAddress;
+    mapAddressBox.classList.remove("hidden");
+  }
+
+  async function applyPin() {
+    const pos = state.marker.getPosition();
+    state.mapLat = pos.lat();
+    state.mapLng = pos.lng();
+    state.mapAddress = await reverseGeocode(state.geocoder, state.mapLat, state.mapLng);
+    mapAddressText.textContent = state.mapAddress;
+    mapAddressBox.classList.remove("hidden");
+  }
+
+  geoBtn?.addEventListener("click", async () => {
+    geoBtn.disabled = true;
+    const original = geoBtn.innerHTML;
+    geoBtn.innerHTML = "Obteniendo ubicación...";
+    try {
+      const { lat, lng } = await geolocate();
+      if (!state.map) {
+        // Si el mapa todavía no cargó, forzamos init y aplicamos al cargar
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (state.map && state.marker) {
+        const p = new google.maps.LatLng(lat, lng);
+        state.map.setCenter(p);
+        state.map.setZoom(17);
+        state.marker.setPosition(p);
+        await onPinMove();
+      } else {
+        // Fallback sin mapa: guardamos coords igual
+        state.mapLat = lat;
+        state.mapLng = lng;
+        state.mapAddress = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        mapAddressText.textContent = state.mapAddress;
+        mapAddressBox.classList.remove("hidden");
+      }
+    } catch (err) {
+      alert(err.message || "No se pudo obtener tu ubicación");
+    } finally {
+      geoBtn.disabled = false;
+      geoBtn.innerHTML = original;
+    }
+  });
+
+  // ----- Submit -----
+  function getDireccion() {
+    if (state.tab === "manual") {
+      const texto = dirManualEl.value.trim();
+      if (!texto) return null;
+      return { tipo: "manual", texto };
+    }
+    if (state.mapLat == null || state.mapLng == null) return null;
+    return {
+      tipo: "mapa",
+      address: state.mapAddress || `${state.mapLat.toFixed(6)}, ${state.mapLng.toFixed(6)}`,
+      lat: state.mapLat,
+      lng: state.mapLng,
+    };
+  }
+
+  function showError(msg, focusEl) {
+    errorEl.textContent = `⚠️ ${msg}`;
+    errorEl.style.display = "block";
+    if (focusEl) {
+      focusEl.style.borderColor = "#ef4444";
+      focusEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(() => focusEl.focus(), 250);
+      setTimeout(() => { focusEl.style.borderColor = ""; }, 2400);
+    }
+  }
+
+  function clearError() {
+    errorEl.style.display = "none";
+    errorEl.textContent = "";
+  }
+
+  // Limpiar el error apenas el usuario empieza a escribir
+  [nombreEl, negEl, descEl, dirManualEl].forEach((el) => {
+    el?.addEventListener("input", clearError);
+  });
+
+  form?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    clearError();
+
+    const servicio = form.dataset.servicio;
+    const nombre = nombreEl.value.trim();
+    const negocio = negEl.value.trim();
+    const descripcion = descEl.value.trim();
+
+    if (!descripcion && !negocio) {
+      showError("Completá al menos la descripción del pedido o la sucursal.", descEl);
+      return;
+    }
+
+    const direccion = getDireccion();
+    if (!direccion) {
+      if (state.tab === "manual") {
+        showError("Ingresá la dirección de entrega (calle y número).", dirManualEl);
+      } else {
+        showError("Marcá tu ubicación en el mapa o tocá 'Usar mi ubicación'.");
+      }
+      return;
+    }
+
+    addItem({
+      servicio,
+      slug: form.dataset.slug || "",
+      imagen: form.dataset.imagen || "",
+      alt: form.dataset.alt || servicio,
+      nombre,
+      negocio,
+      descripcion,
+      direccion,
+    });
+    setProfile({ nombre, direccion });
+
+    // Reset (mantenemos nombre y dirección manual del perfil)
+    negEl.value = "";
+    descEl.value = "";
+
+    feedback.textContent = "✓ Agregado al carrito";
+    feedback.classList.remove("hidden");
+
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = "✓ Agregado";
+    btn.style.background = "#22c55e";
+
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = originalText;
+      btn.style.background = "";
+      feedback.classList.add("hidden");
+    }, 1800);
+  });
+</script>

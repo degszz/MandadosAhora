@@ -1,0 +1,340 @@
+---
+import Layout from "../layouts/Layout.astro";
+import "../styles/global.css";
+---
+
+<Layout title="Admin · Mandados Ahora">
+  <div class="w-full flex justify-center my-8 px-4">
+    <div id="admin-root" class="w-full max-w-5xl">
+      <!-- Poblado por JS -->
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import {
+    getOrders,
+    markPaid,
+    markCompleted,
+    markCancelled,
+    deleteOrder,
+    mapsLinkFor,
+    subscribeOrders,
+  } from "../scripts/orders.js";
+
+  const ADMIN_PASSWORD = "MAfinomax";
+  const SESSION_KEY = "mandados_admin_session_v1";
+
+  const root = document.getElementById("admin-root");
+  let filterEstado = "todos";
+  let unsubscribe = null;
+
+  function isAuthed() {
+    try {
+      return sessionStorage.getItem(SESSION_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function authenticate(password) {
+    if (password === ADMIN_PASSWORD) {
+      sessionStorage.setItem(SESSION_KEY, "1");
+      return true;
+    }
+    return false;
+  }
+
+  function logout() {
+    sessionStorage.removeItem(SESSION_KEY);
+    if (unsubscribe) unsubscribe();
+    renderLogin();
+  }
+
+  // ---------------- LOGIN ----------------
+  function renderLogin(error = "") {
+    root.innerHTML = `
+      <div class="flex justify-center pt-10">
+        <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm border border-gray-100">
+          <div class="flex justify-center mb-4">
+            <div style="width:56px;height:56px;border-radius:9999px;background:#EBF3FF;display:flex;align-items:center;justify-content:center">
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#377DEC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M5 13a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-6z"/>
+                <path d="M11 16a1 1 0 1 0 2 0a1 1 0 0 0 -2 0"/>
+                <path d="M8 11v-4a4 4 0 1 1 8 0v4"/>
+              </svg>
+            </div>
+          </div>
+          <h1 class="text-xl font-bold text-gray-800 text-center mb-1">Panel de administración</h1>
+          <p class="text-sm text-gray-500 text-center mb-5">Ingresá la contraseña para continuar</p>
+          <form id="login-form" class="space-y-3">
+            <input
+              type="password"
+              name="password"
+              autofocus
+              placeholder="Contraseña"
+              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#377DEC] focus:border-[#377DEC] outline-none text-sm"
+            />
+            ${
+              error
+                ? `<p class="text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">${error}</p>`
+                : ""
+            }
+            <button type="submit" class="w-full py-2.5 bg-[#377DEC] hover:bg-[#2563c0] text-white font-semibold rounded-lg transition-colors">
+              Ingresar
+            </button>
+          </form>
+        </div>
+      </div>
+    `;
+    document.getElementById("login-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const password = e.target.password.value;
+      if (authenticate(password)) {
+        renderDashboard();
+      } else {
+        renderLogin("Contraseña incorrecta.");
+      }
+    });
+  }
+
+  // ---------------- DASHBOARD ----------------
+  function renderDashboard() {
+    const orders = getOrders();
+    const stats = {
+      total: orders.length,
+      pendientes: orders.filter((o) => o.estado === "pendiente").length,
+      completados: orders.filter((o) => o.estado === "completado").length,
+      cancelados: orders.filter((o) => o.estado === "cancelado").length,
+    };
+
+    const filtered =
+      filterEstado === "todos" ? orders : orders.filter((o) => o.estado === filterEstado);
+
+    root.innerHTML = `
+      <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-800">Pedidos</h1>
+          <p class="text-sm text-gray-500">Panel de administración — Mandados Ahora</p>
+        </div>
+        <button id="logout-btn" class="text-sm text-gray-500 hover:text-red-500 border border-gray-200 hover:border-red-300 px-3 py-1.5 rounded-lg transition-colors">
+          Cerrar sesión
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        ${statCard("Total", stats.total, "#6b7280")}
+        ${statCard("Pendientes", stats.pendientes, "#f59e0b")}
+        ${statCard("Completados", stats.completados, "#16a34a")}
+        ${statCard("Cancelados", stats.cancelados, "#ef4444")}
+      </div>
+
+      <div class="flex gap-2 mb-4 flex-wrap">
+        ${filterBtn("todos", "Todos")}
+        ${filterBtn("pendiente", "Pendientes")}
+        ${filterBtn("completado", "Completados")}
+        ${filterBtn("cancelado", "Cancelados")}
+      </div>
+
+      <div id="orders-list" class="space-y-3">
+        ${filtered.length === 0 ? emptyState() : filtered.map(orderCard).join("")}
+      </div>
+    `;
+
+    document.getElementById("logout-btn").addEventListener("click", logout);
+
+    document.querySelectorAll(".filter-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        filterEstado = b.dataset.filter;
+        renderDashboard();
+      });
+    });
+
+    document.querySelectorAll("[data-action]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const action = btn.dataset.action;
+        const id = btn.dataset.id;
+        if (action === "pagar") {
+          markPaid(id);
+        } else if (action === "completar") {
+          markCompleted(id);
+        } else if (action === "cancelar") {
+          if (confirm("¿Cancelar este pedido?")) markCancelled(id);
+        } else if (action === "borrar") {
+          if (confirm("¿Eliminar el pedido permanentemente?")) deleteOrder(id);
+        }
+        renderDashboard();
+      });
+    });
+  }
+
+  function statCard(label, value, color) {
+    return `
+      <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+        <div class="text-xs uppercase tracking-wider text-gray-500 font-medium">${label}</div>
+        <div class="text-2xl font-bold mt-1" style="color:${color}">${value}</div>
+      </div>
+    `;
+  }
+
+  function filterBtn(value, label) {
+    const active = filterEstado === value;
+    return `
+      <button class="filter-btn text-sm px-3 py-1.5 rounded-full border transition-colors"
+        data-filter="${value}"
+        style="${
+          active
+            ? "background:#377DEC;color:#fff;border-color:#377DEC"
+            : "background:#fff;color:#4b5563;border-color:#e5e7eb"
+        }">
+        ${label}
+      </button>
+    `;
+  }
+
+  function emptyState() {
+    return `
+      <div class="bg-white rounded-xl p-10 text-center border border-gray-100 text-gray-500">
+        <p class="font-semibold mb-1">Sin pedidos</p>
+        <p class="text-sm">No hay pedidos en esta categoría todavía.</p>
+      </div>
+    `;
+  }
+
+  function orderCard(o) {
+    const fecha = new Date(o.createdAt).toLocaleString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const ubicTxt =
+      o.ubicacion?.tipo === "manual"
+        ? `${o.ubicacion.direccion || ""} ${o.ubicacion.numero || ""}`.trim() || "—"
+        : o.ubicacion?.direccion || "—";
+    const mapsUrl = mapsLinkFor(o);
+
+    const estadoBadge = badge(o.estado, estadoColor(o.estado));
+    const pagoBadge = pagoBadgeRender(o.pago);
+
+    const serviciosHtml = (o.servicios || [])
+      .map(
+        (s) => `
+      <div class="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
+        <div class="flex items-center gap-2 mb-1">
+          <span style="background:#EBF3FF;color:#377DEC;font-size:0.7rem;font-weight:600;padding:0.15rem 0.55rem;border-radius:9999px">${s.servicio || "Servicio"}</span>
+          ${s.local ? `<span class="text-xs text-gray-600"><b>Local:</b> ${escapeHtml(s.local)}</span>` : ""}
+        </div>
+        ${s.detalles ? `<p class="text-xs text-gray-700 whitespace-pre-line">${escapeHtml(s.detalles)}</p>` : ""}
+      </div>
+    `
+      )
+      .join("");
+
+    const isPendiente = o.estado === "pendiente";
+    const pagoTransfPendiente = o.pago?.metodo === "transferencia" && o.pago?.estado !== "pagado";
+
+    return `
+      <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+        <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <div>
+            <div class="flex items-center gap-2">
+              <b class="text-gray-800 text-sm">${escapeHtml(o.cliente?.nombre || "Sin nombre")}</b>
+              ${estadoBadge}
+              ${pagoBadge}
+            </div>
+            <div class="text-xs text-gray-500 mt-0.5">
+              ${fecha} · ID <code class="bg-gray-100 px-1 rounded">${o.id.slice(-8)}</code>
+            </div>
+          </div>
+          <div class="flex gap-1.5 flex-wrap">
+            ${
+              pagoTransfPendiente
+                ? `<button data-action="pagar" data-id="${o.id}" class="text-xs px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg transition-colors">Marcar pagado</button>`
+                : ""
+            }
+            ${
+              isPendiente
+                ? `<button data-action="completar" data-id="${o.id}" class="text-xs px-2.5 py-1 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg transition-colors">Completar</button>`
+                : ""
+            }
+            ${
+              isPendiente
+                ? `<button data-action="cancelar" data-id="${o.id}" class="text-xs px-2.5 py-1 bg-orange-50 text-orange-700 hover:bg-orange-100 rounded-lg transition-colors">Cancelar</button>`
+                : ""
+            }
+            <button data-action="borrar" data-id="${o.id}" class="text-xs px-2.5 py-1 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg transition-colors">Borrar</button>
+          </div>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-3 mb-3">
+          <div class="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
+            <div class="text-xs uppercase text-gray-500 font-medium mb-1">📍 Ubicación (${o.ubicacion?.tipo || "manual"})</div>
+            <div class="text-sm text-gray-800">${escapeHtml(ubicTxt)}</div>
+            ${
+              mapsUrl
+                ? `<a href="${mapsUrl}" target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline mt-1 inline-block">Ver en Google Maps →</a>`
+                : ""
+            }
+          </div>
+          <div class="bg-gray-50 rounded-lg p-2.5 border border-gray-100">
+            <div class="text-xs uppercase text-gray-500 font-medium mb-1">💳 Pago</div>
+            <div class="text-sm text-gray-800">
+              ${o.pago?.metodo === "transferencia" ? "Transferencia (MercadoPago)" : "Efectivo"}
+              ${o.pago?.monto ? ` · <b>$${o.pago.monto}</b>` : ""}
+            </div>
+            ${
+              o.pago?.paymentUrl
+                ? `<a href="${o.pago.paymentUrl}" target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline mt-1 inline-block">Link de pago →</a>`
+                : ""
+            }
+          </div>
+        </div>
+
+        <div>
+          <div class="text-xs uppercase text-gray-500 font-medium mb-1.5">Servicios</div>
+          <div class="space-y-1.5">
+            ${serviciosHtml || `<p class="text-xs text-gray-400">Sin servicios</p>`}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function estadoColor(estado) {
+    return (
+      { pendiente: "#f59e0b", completado: "#16a34a", cancelado: "#ef4444" }[estado] ||
+      "#6b7280"
+    );
+  }
+
+  function badge(text, color) {
+    return `<span style="background:${color}20;color:${color};font-size:0.65rem;font-weight:600;padding:0.15rem 0.55rem;border-radius:9999px;text-transform:uppercase;letter-spacing:0.04em">${text}</span>`;
+  }
+
+  function pagoBadgeRender(pago) {
+    if (!pago) return "";
+    const c = pago.estado === "pagado" ? "#16a34a" : "#f59e0b";
+    return badge(`pago: ${pago.estado}`, c);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[c]));
+  }
+
+  // ---------------- INIT ----------------
+  if (isAuthed()) {
+    renderDashboard();
+    unsubscribe = subscribeOrders(() => renderDashboard());
+  } else {
+    renderLogin();
+  }
+</script>

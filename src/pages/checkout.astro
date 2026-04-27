@@ -1,0 +1,647 @@
+---
+import Layout from "../layouts/Layout.astro";
+import "../styles/global.css";
+import { GOOGLE_MAPS_API_KEY, INITIAL_LAT, INITIAL_LNG } from "../scripts/gmaps.js";
+
+const PRECIO_TRANSFERENCIA = 3000;
+---
+
+<Layout title="Checkout">
+  <div class="w-full flex justify-center my-8 px-4">
+    <div
+      id="checkout-root"
+      class="w-full max-w-2xl min-h-[300px] flex items-start justify-center"
+      data-precio-transferencia={PRECIO_TRANSFERENCIA}
+      data-initial-lat={INITIAL_LAT}
+      data-initial-lng={INITIAL_LNG}
+    >
+      <!-- Poblado por JS -->
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { getItems, clear } from "../scripts/cart.js";
+  import { SERVICIOS } from "../data/servicios.js";
+  import { createOrder, updateOrder } from "../scripts/orders.js";
+  import { createPaymentPreference } from "../scripts/mercadopago.js";
+  import { getProfile, setProfile } from "../scripts/profile.js";
+  import {
+    loadGoogleMaps,
+    reverseGeocode,
+    geolocate,
+    isGmapsConfigured,
+  } from "../scripts/gmaps.js";
+
+  const root = document.getElementById("checkout-root");
+  const PRECIO_TRANSFERENCIA = parseInt(root.dataset.precioTransferencia, 10);
+  const INITIAL_LAT = parseFloat(root.dataset.initialLat);
+  const INITIAL_LNG = parseFloat(root.dataset.initialLng);
+
+  const WA_NUMBER = "2271415182";
+
+  const items = getItems();
+  const profile = getProfile();
+
+  // Lookup imagen por nombre del servicio (fallback para items viejos del localStorage)
+  const IMG_BY_SERVICIO = Object.fromEntries(
+    SERVICIOS.map((s) => [s.servicio, s.imagen])
+  );
+
+  const state = {
+    pagoMetodo: null, // "transferencia" | "efectivo"
+    dirTab: "manual",
+    map: null,
+    marker: null,
+    geocoder: null,
+    mapLat: null,
+    mapLng: null,
+    mapAddress: "",
+    mapReady: false,
+  };
+
+  const escapeHtml = (s) =>
+    String(s ?? "").replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[c]));
+
+  const getItemImage = (it) => it.imagen || IMG_BY_SERVICIO[it.servicio] || "";
+
+  const getItemDirText = (it) => {
+    if (!it.direccion) return "";
+    if (typeof it.direccion === "string") return it.direccion;
+    return it.direccion.address || it.direccion.texto || "";
+  };
+
+  function firstNonEmpty(arr, key) {
+    for (const it of arr) {
+      const v = it?.[key];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return "";
+  }
+
+  if (items.length === 0) {
+    root.innerHTML = `
+      <div style="text-align:center;padding:4rem 1rem;width:100%">
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 1rem;color:#d1d5db;display:block">
+          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+          <path d="M6 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>
+          <path d="M17 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>
+          <path d="M17 17h-11v-14h-2"/>
+          <path d="M6 5l14 1l-1 7h-13"/>
+        </svg>
+        <h2 style="font-size:1.5rem;font-weight:700;color:#374151;margin-bottom:0.5rem">Carrito vacío</h2>
+        <p style="color:#9ca3af;margin-bottom:1.5rem">No tenés servicios en tu carrito todavía.</p>
+        <a href="/" style="display:inline-block;background:#377DEC;color:#fff;padding:0.625rem 1.5rem;border-radius:0.5rem;font-weight:500;text-decoration:none">
+          Ver servicios
+        </a>
+      </div>
+    `;
+  } else {
+    renderForm();
+  }
+
+  // ==========================================================
+  //                       RENDER
+  // ==========================================================
+  function renderForm() {
+    const itemsHtml = items
+      .map((item, i) => {
+        const img = getItemImage(item);
+        const avatar = img
+          ? `<img src="${escapeHtml(img)}" alt="${escapeHtml(item.servicio)}" loading="lazy"
+                  style="width:56px;height:56px;border-radius:0.75rem;object-fit:contain;background:#EBF3FF;padding:4px;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(55,125,236,0.15)" />`
+          : `<div style="width:56px;height:56px;border-radius:0.75rem;background:#EBF3FF;display:flex;align-items:center;justify-content:center;color:#377DEC;font-weight:700;font-size:1.1rem;flex-shrink:0">
+                ${escapeHtml((item.servicio || "?").charAt(0).toUpperCase())}
+             </div>`;
+        return `
+          <div style="display:flex;gap:0.75rem;border:1px solid #e5e7eb;border-radius:0.875rem;padding:0.75rem;background:#fff">
+            ${avatar}
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem">
+                <span style="background:#EBF3FF;color:#377DEC;font-weight:700;font-size:0.7rem;padding:0.1rem 0.5rem;border-radius:9999px">
+                  ${i + 1}
+                </span>
+                <b style="color:#1f2937;font-size:0.95rem">${escapeHtml(item.servicio)}</b>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:0.2rem;font-size:0.8rem;color:#374151">
+                ${item.negocio ? `<div><span style="color:#9ca3af">🏬</span> ${escapeHtml(item.negocio)}</div>` : ""}
+                ${item.descripcion ? `<div style="white-space:pre-wrap"><span style="color:#9ca3af">📝</span> ${escapeHtml(item.descripcion)}</div>` : ""}
+              </div>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    // Pre-fill dirección desde profile o desde el primer item con dirección
+    let initialManual = "";
+    let initialMapLat = null, initialMapLng = null, initialMapAddr = "";
+    let initialTab = "manual";
+    if (profile.direccion) {
+      if (profile.direccion.tipo === "manual" && profile.direccion.texto) {
+        initialManual = profile.direccion.texto;
+      } else if (profile.direccion.tipo === "mapa") {
+        initialManual = profile.direccion.address || "";
+        initialMapLat = profile.direccion.lat ?? null;
+        initialMapLng = profile.direccion.lng ?? null;
+        initialMapAddr = profile.direccion.address || "";
+      }
+    }
+    if (!initialManual) {
+      const firstWithDir = items.find((it) => getItemDirText(it));
+      if (firstWithDir) initialManual = getItemDirText(firstWithDir);
+    }
+
+    const nombrePrefill = profile.nombre || firstNonEmpty(items, "nombre") || "";
+
+    root.innerHTML = `
+      <form id="checkout-form" style="background:#fff;border-radius:1rem;box-shadow:0 10px 25px -5px rgba(0,0,0,0.08);padding:1.5rem;width:100%;display:flex;flex-direction:column;gap:1.25rem;border:1px solid #f3f4f6">
+
+        <div>
+          <h1 style="font-size:1.5rem;font-weight:800;color:#1f2937;margin:0 0 0.25rem">Confirmá tu pedido</h1>
+          <p style="color:#6b7280;font-size:0.875rem;margin:0">${items.length} servicio${items.length === 1 ? "" : "s"} en el carrito.</p>
+        </div>
+
+        <!-- Resumen -->
+        <div style="display:flex;flex-direction:column;gap:0.6rem">
+          <h3 style="font-size:0.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin:0">
+            Resumen
+          </h3>
+          <div style="display:flex;flex-direction:column;gap:0.6rem">
+            ${itemsHtml}
+          </div>
+          <a href="/" style="font-size:0.78rem;color:#377DEC;text-decoration:underline;align-self:flex-start">
+            ¿Querés editar algo? Volvé al carrito
+          </a>
+        </div>
+
+        <!-- Datos del cliente -->
+        <div>
+          <h3 style="font-size:0.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">
+            Tus datos
+          </h3>
+          <input
+            id="ck-nombre"
+            type="text"
+            value="${escapeHtml(nombrePrefill)}"
+            placeholder="Tu nombre (opcional)"
+            style="width:100%;padding:0.6rem 0.85rem;border:1px solid #d1d5db;border-radius:0.6rem;outline:none;font-size:0.9rem"
+            onfocus="this.style.borderColor='#377DEC'"
+            onblur="this.style.borderColor='#d1d5db'"
+          />
+        </div>
+
+        <!-- Dirección -->
+        <div>
+          <h3 style="font-size:0.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">
+            Dirección de entrega *
+          </h3>
+          <div id="ck-tabs" style="display:inline-flex;background:#f3f4f6;border-radius:0.5rem;padding:0.25rem;margin-bottom:0.5rem">
+            <button type="button" data-ck-tab="manual" class="ck-tab"
+              style="padding:0.4rem 0.8rem;border-radius:0.4rem;font-size:0.85rem;font-weight:500;background:#fff;color:#377DEC;box-shadow:0 1px 2px rgba(0,0,0,0.05);border:none;cursor:pointer">
+              ✍️ Escribir
+            </button>
+            <button type="button" data-ck-tab="mapa" class="ck-tab"
+              style="padding:0.4rem 0.8rem;border-radius:0.4rem;font-size:0.85rem;font-weight:500;background:transparent;color:#6b7280;border:none;cursor:pointer">
+              📍 En el mapa
+            </button>
+          </div>
+
+          <div id="ck-panel-manual">
+            <input
+              id="ck-dir-manual"
+              type="text"
+              value="${escapeHtml(initialManual)}"
+              placeholder="Calle y número (ej: San Martín 450)"
+              style="width:100%;padding:0.6rem 0.85rem;border:1px solid #d1d5db;border-radius:0.6rem;outline:none;font-size:0.9rem"
+              onfocus="this.style.borderColor='#377DEC'"
+              onblur="this.style.borderColor='#d1d5db'"
+            />
+          </div>
+
+          <div id="ck-panel-mapa" style="display:none;flex-direction:column;gap:0.5rem">
+            <button type="button" id="ck-geo-btn"
+              style="width:100%;background:#EBF3FF;color:#377DEC;border:1px solid rgba(55,125,236,0.3);border-radius:0.6rem;padding:0.55rem;font-size:0.85rem;font-weight:500;cursor:pointer">
+              📍 Usar mi ubicación
+            </button>
+            <div id="ck-map" style="width:100%;height:220px;border-radius:0.6rem;border:1px solid #e5e7eb;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:0.85rem;color:#6b7280">
+              Cargando mapa...
+            </div>
+            <div id="ck-map-addr" style="display:none;background:#EBF3FF;color:#1e40af;padding:0.5rem 0.75rem;border-radius:0.5rem;font-size:0.8rem">
+              <b>Dirección:</b> <span id="ck-map-addr-text">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pago -->
+        <div>
+          <h3 style="font-size:0.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">
+            Método de pago *
+          </h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.7rem">
+            <button type="button" class="pago-card" data-metodo="transferencia"
+              style="background:#fff;border:2px solid #e5e7eb;border-radius:0.875rem;padding:1rem;text-align:left;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:0.25rem">
+              <div style="display:flex;align-items:center;gap:0.5rem">
+                <span style="font-size:1.25rem">🏦</span>
+                <b style="color:#1f2937;font-size:0.95rem">Transferencia</b>
+              </div>
+              <span style="color:#377DEC;font-weight:700;font-size:1rem">$${PRECIO_TRANSFERENCIA}</span>
+              <span style="font-size:0.7rem;color:#6b7280">Pagás ahora con MercadoPago (QR)</span>
+            </button>
+            <button type="button" class="pago-card" data-metodo="efectivo"
+              style="background:#fff;border:2px solid #e5e7eb;border-radius:0.875rem;padding:1rem;text-align:left;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:0.25rem">
+              <div style="display:flex;align-items:center;gap:0.5rem">
+                <span style="font-size:1.25rem">💵</span>
+                <b style="color:#1f2937;font-size:0.95rem">Efectivo</b>
+              </div>
+              <span style="color:#16a34a;font-weight:700;font-size:1rem">Al recibir</span>
+              <span style="font-size:0.7rem;color:#6b7280">Queda pendiente hasta entregar</span>
+            </button>
+          </div>
+        </div>
+
+        <p id="ck-error" role="alert"
+          style="display:none;font-size:0.85rem;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;padding:0.5rem 0.75rem;border-radius:0.5rem;margin:0">
+        </p>
+
+        <button type="submit"
+          style="width:100%;background:#377DEC;color:#fff;border:none;padding:0.85rem;border-radius:0.75rem;font-size:0.95rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem;transition:all 0.15s">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+            <path d="M3 21l1.65 -3.8a9 9 0 1 1 3.4 2.9l-5.05 .9"/>
+            <path d="M9 10a.5 .5 0 0 0 1 0v-1a.5 .5 0 0 0 -1 0v1a5 5 0 0 0 5 5h1a.5 .5 0 0 0 0 -1h-1a.5 .5 0 0 0 0 1"/>
+          </svg>
+          Confirmar pedido
+        </button>
+      </form>
+    `;
+
+    // Restaurar estado inicial del mapa si existía
+    if (initialMapLat != null && initialMapLng != null) {
+      state.mapLat = initialMapLat;
+      state.mapLng = initialMapLng;
+      state.mapAddress = initialMapAddr;
+    }
+
+    initTabs();
+    initPagoCards();
+    initSubmit();
+    initGeo();
+  }
+
+  // ==========================================================
+  //                       TABS / MAPA
+  // ==========================================================
+  function setTab(tab) {
+    state.dirTab = tab;
+    document.querySelectorAll(".ck-tab").forEach((b) => {
+      const active = b.dataset.ckTab === tab;
+      b.style.background = active ? "#fff" : "transparent";
+      b.style.color = active ? "#377DEC" : "#6b7280";
+      b.style.boxShadow = active ? "0 1px 2px rgba(0,0,0,0.05)" : "none";
+    });
+    document.getElementById("ck-panel-manual").style.display = tab === "manual" ? "" : "none";
+    document.getElementById("ck-panel-mapa").style.display = tab === "mapa" ? "flex" : "none";
+    if (tab === "mapa" && !state.mapReady) initMap();
+  }
+
+  function initTabs() {
+    document.querySelectorAll(".ck-tab").forEach((b) => {
+      b.addEventListener("click", () => setTab(b.dataset.ckTab));
+    });
+  }
+
+  function initMap() {
+    state.mapReady = true;
+    const mapEl = document.getElementById("ck-map");
+    if (!isGmapsConfigured()) {
+      mapEl.innerHTML = `
+        <div style="padding:1rem;text-align:center;font-size:0.85rem;color:#6b7280">
+          ⚠️ Mapa no disponible.<br>Usá la opción <b>Escribir</b>.
+        </div>
+      `;
+      return;
+    }
+    loadGoogleMaps()
+      .then(() => {
+        mapEl.innerHTML = "";
+        const center = {
+          lat: state.mapLat ?? INITIAL_LAT,
+          lng: state.mapLng ?? INITIAL_LNG,
+        };
+        state.map = new google.maps.Map(mapEl, {
+          center,
+          zoom: 15,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+        });
+        state.marker = new google.maps.Marker({
+          position: center,
+          map: state.map,
+          draggable: true,
+          title: "Tu ubicación",
+        });
+        state.geocoder = new google.maps.Geocoder();
+        state.marker.addListener("dragend", onPinMove);
+        state.map.addListener("click", (e) => {
+          state.marker.setPosition(e.latLng);
+          onPinMove();
+        });
+        onPinMove();
+      })
+      .catch(() => {
+        mapEl.innerHTML = `
+          <div style="padding:1rem;text-align:center;font-size:0.85rem;color:#6b7280">
+            ⚠️ No se pudo cargar el mapa.<br>Usá <b>Escribir</b>.
+          </div>
+        `;
+      });
+  }
+
+  async function onPinMove() {
+    const pos = state.marker.getPosition();
+    state.mapLat = pos.lat();
+    state.mapLng = pos.lng();
+    state.mapAddress = await reverseGeocode(state.geocoder, state.mapLat, state.mapLng);
+    document.getElementById("ck-map-addr-text").textContent = state.mapAddress;
+    document.getElementById("ck-map-addr").style.display = "block";
+  }
+
+  function initGeo() {
+    document.getElementById("ck-geo-btn")?.addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      const original = btn.innerHTML;
+      btn.innerHTML = "Obteniendo ubicación...";
+      try {
+        const { lat, lng } = await geolocate();
+        if (state.map && state.marker) {
+          const p = new google.maps.LatLng(lat, lng);
+          state.map.setCenter(p);
+          state.map.setZoom(17);
+          state.marker.setPosition(p);
+          await onPinMove();
+        } else {
+          state.mapLat = lat;
+          state.mapLng = lng;
+          state.mapAddress = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          document.getElementById("ck-map-addr-text").textContent = state.mapAddress;
+          document.getElementById("ck-map-addr").style.display = "block";
+        }
+      } catch (err) {
+        alert(err.message || "No se pudo obtener tu ubicación");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
+    });
+  }
+
+  // ==========================================================
+  //                       PAGO
+  // ==========================================================
+  function initPagoCards() {
+    const cards = document.querySelectorAll(".pago-card");
+    cards.forEach((card) => {
+      card.addEventListener("click", () => {
+        state.pagoMetodo = card.dataset.metodo;
+        cards.forEach((c) => {
+          const sel = c === card;
+          c.style.borderColor = sel ? "#377DEC" : "#e5e7eb";
+          c.style.background = sel ? "#EBF3FF" : "#fff";
+        });
+      });
+    });
+  }
+
+  function showError(msg) {
+    const el = document.getElementById("ck-error");
+    el.textContent = `⚠️ ${msg}`;
+    el.style.display = "block";
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function clearError() {
+    const el = document.getElementById("ck-error");
+    if (el) {
+      el.style.display = "none";
+      el.textContent = "";
+    }
+  }
+
+  // ==========================================================
+  //                       SUBMIT
+  // ==========================================================
+  function getDireccion() {
+    if (state.dirTab === "manual") {
+      const texto = document.getElementById("ck-dir-manual").value.trim();
+      if (!texto) return null;
+      return { tipo: "manual", texto, address: texto };
+    }
+    if (state.mapLat == null || state.mapLng == null) return null;
+    return {
+      tipo: "mapa",
+      address: state.mapAddress || `${state.mapLat.toFixed(6)}, ${state.mapLng.toFixed(6)}`,
+      lat: state.mapLat,
+      lng: state.mapLng,
+    };
+  }
+
+  function initSubmit() {
+    document.getElementById("checkout-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      clearError();
+
+      const direccion = getDireccion();
+      if (!direccion) {
+        showError(
+          state.dirTab === "manual"
+            ? "Ingresá la dirección de entrega."
+            : "Marcá tu ubicación en el mapa o tocá 'Usar mi ubicación'."
+        );
+        return;
+      }
+
+      if (!state.pagoMetodo) {
+        showError("Seleccioná un método de pago.");
+        return;
+      }
+
+      const nombre = document.getElementById("ck-nombre").value.trim();
+
+      const ubicacion = {
+        tipo: direccion.tipo,
+        direccion: direccion.address || direccion.texto || "",
+        numero: "",
+        lat: direccion.lat ?? null,
+        lng: direccion.lng ?? null,
+      };
+
+      const servicios = items.map((it) => ({
+        servicio: it.servicio,
+        imagen: getItemImage(it),
+        nombre: it.nombre || nombre,
+        negocio: it.negocio || "",
+        descripcion: it.descripcion || "",
+        direccion,
+        cantidad: it.cantidad ?? 1,
+      }));
+
+      const monto = state.pagoMetodo === "transferencia" ? PRECIO_TRANSFERENCIA : 0;
+
+      const order = createOrder({
+        nombre,
+        servicios,
+        ubicacion,
+        pago: { metodo: state.pagoMetodo, monto },
+      });
+
+      let pref = null;
+      if (state.pagoMetodo === "transferencia") {
+        try {
+          pref = await createPaymentPreference({
+            orderId: order.id,
+            amount: monto,
+            description: `Mandados Ahora — pedido ${order.id}`,
+          });
+          updateOrder(order.id, {
+            pago: { preferenceId: pref.id, paymentUrl: pref.paymentUrl },
+          });
+        } catch (err) {
+          console.error(err);
+          showError("No se pudo generar el link de pago. Probá de nuevo.");
+          return;
+        }
+      }
+
+      // Guardar nombre + direccion para futuros pedidos
+      setProfile({ nombre, direccion });
+
+      const waUrl = buildWhatsappMessage({
+        order,
+        nombre,
+        servicios,
+        direccion,
+        pago: { metodo: state.pagoMetodo, monto },
+        paymentUrl: pref?.paymentUrl || null,
+      });
+      window.open(waUrl, "_blank");
+
+      if (state.pagoMetodo === "transferencia") {
+        showTransferSuccess(order, pref);
+      } else {
+        showCashSuccess(order);
+      }
+
+      clear();
+    });
+  }
+
+  // ==========================================================
+  //                       MENSAJE WA
+  // ==========================================================
+  function buildWhatsappMessage({ order, nombre, servicios, direccion, pago, paymentUrl }) {
+    const serviciosTxt = servicios
+      .map((s, i) => {
+        const lines = [`*${i + 1}. ${s.servicio}*`];
+        if (s.negocio) lines.push(`🏬 Sucursal: ${s.negocio}`);
+        if (s.descripcion) lines.push(`📝 Descripción:\n${s.descripcion}`);
+        return lines.join("\n");
+      })
+      .join("\n\n---\n\n");
+
+    const dirTxt = direccion?.address || direccion?.texto || "";
+    const dirCoords =
+      direccion?.lat != null && direccion?.lng != null
+        ? `\n🗺️ https://www.google.com/maps/search/?api=1&query=${direccion.lat},${direccion.lng}`
+        : "";
+
+    const pagoTxt =
+      pago.metodo === "transferencia"
+        ? `💳 *Pago:* Transferencia (MercadoPago) — $${pago.monto}${
+            paymentUrl ? `\n🔗 ${paymentUrl}` : ""
+          }`
+        : `💳 *Pago:* Efectivo (al recibir)`;
+
+    const header = [
+      `🛒 *Nuevo pedido — Mandados Ahora*`,
+      `Total de servicios: ${servicios.length}`,
+    ];
+    if (nombre) header.push(`👤 *Nombre:* ${nombre}`);
+    if (dirTxt) header.push(`📍 *Dirección:* ${dirTxt}${dirCoords}`);
+
+    const msg = `${header.join("\n")}\n\n${serviciosTxt}\n\n${pagoTxt}\n🆔 ${order.id}`;
+    return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`;
+  }
+
+  // ==========================================================
+  //                       SUCCESS
+  // ==========================================================
+  function showTransferSuccess(order, pref) {
+    root.innerHTML = `
+      <div style="background:#fff;border-radius:1rem;padding:2rem 1.5rem;width:100%;text-align:center;box-shadow:0 10px 25px -5px rgba(0,0,0,0.08);border:1px solid #e5e7eb">
+        <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#377DEC" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 0.75rem;display:block">
+          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+          <path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z"/>
+          <path d="M3 10l18 0"/>
+          <path d="M7 15l.01 0"/>
+          <path d="M11 15l2 0"/>
+        </svg>
+        <h2 style="font-size:1.35rem;font-weight:700;color:#1f2937;margin-bottom:0.25rem">Pedido creado</h2>
+        <p style="color:#6b7280;font-size:0.875rem;margin-bottom:1rem">
+          Pagá la transferencia para confirmar tu pedido.
+        </p>
+        ${
+          pref.qrImage
+            ? `<img src="${pref.qrImage}" alt="QR de pago" style="margin:0 auto 0.75rem;display:block;border-radius:0.5rem;border:1px solid #e5e7eb" />`
+            : ""
+        }
+        <a href="${pref.paymentUrl}" target="_blank" rel="noopener"
+          style="display:inline-block;background:#00B1EA;color:#fff;padding:0.7rem 1.5rem;border-radius:0.5rem;font-weight:600;text-decoration:none;margin-bottom:0.75rem">
+          Pagar con MercadoPago
+        </a>
+        <p style="font-size:0.7rem;color:#9ca3af;margin:0.25rem 0 1rem">
+          ID de pedido: <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">${order.id}</code>
+        </p>
+        ${
+          pref.demo
+            ? `<p style="font-size:0.7rem;color:#b45309;background:#fef3c7;padding:0.5rem;border-radius:0.5rem;margin-bottom:1rem">
+                ⚙️ Modo demo: la confirmación de pago se hace manualmente desde el panel admin.
+              </p>`
+            : ""
+        }
+        <a href="/" style="display:inline-block;color:#6b7280;font-size:0.875rem;text-decoration:underline">
+          Volver al inicio
+        </a>
+      </div>
+    `;
+  }
+
+  function showCashSuccess(order) {
+    root.innerHTML = `
+      <div style="background:#fff;border-radius:1rem;padding:2rem 1.5rem;width:100%;text-align:center;box-shadow:0 10px 25px -5px rgba(0,0,0,0.08);border:1px solid #e5e7eb">
+        <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 0.75rem;display:block">
+          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+          <path d="M5 12l5 5l10 -10"/>
+        </svg>
+        <h2 style="font-size:1.35rem;font-weight:700;color:#1f2937;margin-bottom:0.25rem">¡Pedido recibido!</h2>
+        <p style="color:#6b7280;font-size:0.875rem;margin-bottom:1rem">
+          Pagás en efectivo al recibir el pedido. Queda marcado como <b>pendiente</b>.
+        </p>
+        <p style="font-size:0.7rem;color:#9ca3af;margin-bottom:1rem">
+          ID de pedido: <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">${order.id}</code>
+        </p>
+        <a href="/" style="display:inline-block;background:#377DEC;color:#fff;padding:0.625rem 1.5rem;border-radius:0.5rem;font-weight:500;text-decoration:none">
+          Volver al inicio
+        </a>
+      </div>
+    `;
+  }
+</script>

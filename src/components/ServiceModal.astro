@@ -1,0 +1,659 @@
+---
+import { GOOGLE_MAPS_API_KEY, INITIAL_LAT, INITIAL_LNG } from "../scripts/gmaps.js";
+---
+
+<!-- Overlay -->
+<div
+  id="svc-overlay"
+  class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1200] opacity-0 pointer-events-none transition-opacity duration-300"
+></div>
+
+<!-- Modal wrapper -->
+<div
+  id="svc-wrap"
+  class="fixed inset-0 z-[1201] flex items-end sm:items-center justify-center p-0 sm:p-4 pointer-events-none"
+  data-initial-lat={INITIAL_LAT}
+  data-initial-lng={INITIAL_LNG}
+>
+  <div
+    id="svc-card"
+    role="dialog"
+    aria-modal="true"
+    class="bg-white w-full max-w-md max-h-[94vh] sm:max-h-[88vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl shadow-2xl translate-y-12 opacity-0 scale-95 transition-all duration-300 ease-out"
+  >
+    <!-- Hero -->
+    <div id="svc-hero" class="relative px-5 pt-5 pb-4 overflow-hidden border-b border-gray-100">
+      <div id="svc-grad" class="absolute inset-0 opacity-25 transition-opacity"></div>
+
+      <button
+        id="svc-close"
+        type="button"
+        aria-label="Cerrar"
+        class="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-white/90 hover:bg-white shadow flex items-center justify-center text-gray-700 hover:text-black transition active:scale-90"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 6L6 18"/><path d="M6 6l12 12"/>
+        </svg>
+      </button>
+
+      <div class="relative z-[1] flex items-center gap-4">
+        <div class="relative shrink-0 w-24 h-24 flex items-center justify-center">
+          <img
+            id="svc-img"
+            src=""
+            alt=""
+            class="w-24 h-24 object-contain drop-shadow-xl -rotate-6 transition-transform duration-500"
+          />
+        </div>
+        <div class="min-w-0 flex-1">
+          <p class="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Pedir un mandado</p>
+          <h2 id="svc-title" class="text-2xl font-bold text-gray-900 truncate">—</h2>
+          <p class="text-xs text-gray-500 mt-0.5">Te llevamos a tu puerta en San Miguel del Monte</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Form -->
+    <form id="svc-form" class="px-5 pt-4 pb-5 space-y-3">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide" for="svc-nombre">
+          Nombre
+        </label>
+        <input
+          id="svc-nombre"
+          type="text"
+          placeholder="Tu nombre (opcional)"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#377DEC] focus:border-[#377DEC] outline-none text-sm"
+        />
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide" for="svc-negocio">
+          Sucursal o local
+        </label>
+        <input
+          id="svc-negocio"
+          type="text"
+          placeholder="¿De qué local? (ej: Supermercado Día)"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#377DEC] focus:border-[#377DEC] outline-none text-sm"
+        />
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide" for="svc-desc">
+          Descripción del pedido
+        </label>
+        <textarea
+          id="svc-desc"
+          rows="3"
+          placeholder="Describí qué necesitás (ej: 2 cocas de 2.25L, pan lactal)"
+          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#377DEC] focus:border-[#377DEC] outline-none resize-none text-sm"
+        ></textarea>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">
+          Dirección de entrega
+        </label>
+        <div class="inline-flex bg-gray-100 rounded-lg p-1 mb-2" role="tablist">
+          <button
+            type="button"
+            data-tab="manual"
+            class="svc-tab px-3 py-1.5 rounded-md text-sm font-medium bg-white text-[#377DEC] shadow-sm"
+            aria-pressed="true"
+          >
+            ✍️ Escribir
+          </button>
+          <button
+            type="button"
+            data-tab="mapa"
+            class="svc-tab px-3 py-1.5 rounded-md text-sm font-medium text-gray-500 bg-transparent"
+            aria-pressed="false"
+          >
+            📍 En el mapa
+          </button>
+        </div>
+
+        <div id="svc-panel-manual">
+          <input
+            id="svc-dir-manual"
+            type="text"
+            placeholder="Calle y número (ej: San Martín 450)"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#377DEC] focus:border-[#377DEC] outline-none text-sm"
+          />
+        </div>
+
+        <div id="svc-panel-mapa" class="hidden space-y-2">
+          <button
+            type="button"
+            id="svc-geo-btn"
+            class="w-full bg-[#EBF3FF] text-[#377DEC] border border-[#377DEC]/30 rounded-lg py-2 text-sm font-medium hover:bg-[#dbe9ff] transition-colors flex items-center justify-center gap-2"
+          >
+            📍 Usar mi ubicación
+          </button>
+          <div
+            id="svc-map"
+            class="w-full h-[200px] rounded-lg border border-gray-200 bg-gray-100 flex items-center justify-center text-sm text-gray-500"
+          >
+            Cargando mapa...
+          </div>
+          <div
+            id="svc-map-addr"
+            class="hidden bg-[#EBF3FF] text-[#1e40af] px-3 py-2 rounded-lg text-xs"
+          >
+            <b>Dirección:</b> <span id="svc-map-addr-text">—</span>
+          </div>
+        </div>
+      </div>
+
+      <p
+        id="svc-error"
+        class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2"
+        role="alert"
+        style="display:none"
+      ></p>
+
+      <button
+        type="submit"
+        id="svc-add-btn"
+        class="relative w-full overflow-hidden bg-black text-white rounded-xl py-3 font-semibold text-sm transition-all duration-200 hover:shadow-lg hover:scale-[1.01] active:scale-95 disabled:opacity-60 flex items-center justify-center gap-2 shadow-md"
+      >
+        <span id="svc-add-text" class="flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>
+            <path d="M17 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>
+            <path d="M17 17h-11v-14h-2"/>
+            <path d="M6 5l14 1l-1 7h-13"/>
+          </svg>
+          Agregar al carrito
+        </span>
+      </button>
+
+      <!-- Success state (hidden by default) -->
+      <div id="svc-success" class="hidden mt-2">
+        <div class="flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 px-3 py-2 rounded-lg text-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12l5 5l10 -10"/>
+          </svg>
+          <span><b>Agregado.</b> ¿Sumás otro servicio o vas al carrito?</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 mt-2">
+          <button
+            id="svc-add-another"
+            type="button"
+            class="border-2 border-gray-200 hover:border-[#377DEC] hover:text-[#377DEC] text-gray-700 rounded-lg py-2 text-sm font-medium transition-all"
+          >
+            Agregar otro
+          </button>
+          <button
+            id="svc-go-cart"
+            type="button"
+            class="bg-[#25D366] hover:bg-[#1da851] text-white rounded-lg py-2 text-sm font-semibold transition-all"
+          >
+            Ver carrito
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Fly-to-cart layer (animaciones) -->
+<div id="svc-fly-layer" class="pointer-events-none fixed inset-0 z-[1300]"></div>
+
+<script>
+  import { SERVICIOS } from "../data/servicios.js";
+  import { addItem } from "../scripts/cart.js";
+  import { getProfile, setProfile } from "../scripts/profile.js";
+  import {
+    loadGoogleMaps,
+    reverseGeocode,
+    geolocate,
+    isGmapsConfigured,
+  } from "../scripts/gmaps.js";
+
+  const overlay = document.getElementById("svc-overlay");
+  const wrap = document.getElementById("svc-wrap");
+  const card = document.getElementById("svc-card");
+  const closeBtn = document.getElementById("svc-close");
+  const grad = document.getElementById("svc-grad");
+  const img = document.getElementById("svc-img");
+  const titleEl = document.getElementById("svc-title");
+
+  const form = document.getElementById("svc-form");
+  const nombreEl = document.getElementById("svc-nombre");
+  const negEl = document.getElementById("svc-negocio");
+  const descEl = document.getElementById("svc-desc");
+  const dirManualEl = document.getElementById("svc-dir-manual");
+  const geoBtn = document.getElementById("svc-geo-btn");
+  const mapEl = document.getElementById("svc-map");
+  const mapAddrBox = document.getElementById("svc-map-addr");
+  const mapAddrText = document.getElementById("svc-map-addr-text");
+  const addBtn = document.getElementById("svc-add-btn");
+  const addText = document.getElementById("svc-add-text");
+  const errorEl = document.getElementById("svc-error");
+  const successBox = document.getElementById("svc-success");
+  const addAnotherBtn = document.getElementById("svc-add-another");
+  const goCartBtn = document.getElementById("svc-go-cart");
+  const flyLayer = document.getElementById("svc-fly-layer");
+
+  const INITIAL_LAT = parseFloat(wrap.dataset.initialLat);
+  const INITIAL_LNG = parseFloat(wrap.dataset.initialLng);
+
+  // Map de slug -> servicio para lookup rápido
+  const SVC_BY_SLUG = Object.fromEntries(SERVICIOS.map((s) => [s.slug, s]));
+
+  const state = {
+    open: false,
+    servicio: null,
+    tab: "manual",
+    map: null,
+    marker: null,
+    geocoder: null,
+    mapLat: null,
+    mapLng: null,
+    mapAddress: "",
+    mapReady: false,
+    lastGradient: "",
+  };
+
+  // ---------- Apertura / cierre ----------
+  function openModal(slug) {
+    const svc = SVC_BY_SLUG[slug];
+    if (!svc) return;
+    state.servicio = svc;
+
+    // Header dinámico
+    titleEl.textContent = svc.titulo ?? svc.servicio;
+    img.src = svc.imagen;
+    img.alt = svc.alt || svc.servicio;
+
+    // Reemplazar gradient class de forma segura
+    if (state.lastGradient) {
+      state.lastGradient.split(" ").forEach((c) => grad.classList.remove(c));
+    }
+    state.lastGradient = svc.gradient || "";
+    if (state.lastGradient) {
+      state.lastGradient.split(" ").forEach((c) => grad.classList.add(c));
+    }
+
+    resetForm();
+    prefillFromProfile();
+
+    overlay.classList.remove("pointer-events-none");
+    overlay.classList.remove("opacity-0");
+    overlay.classList.add("opacity-100");
+
+    wrap.classList.remove("pointer-events-none");
+    requestAnimationFrame(() => {
+      card.classList.remove("translate-y-12", "opacity-0", "scale-95");
+      card.classList.add("translate-y-0", "opacity-100", "scale-100");
+    });
+
+    document.body.style.overflow = "hidden";
+    state.open = true;
+  }
+
+  function closeModal() {
+    overlay.classList.add("opacity-0");
+    overlay.classList.remove("opacity-100");
+    overlay.classList.add("pointer-events-none");
+
+    card.classList.add("translate-y-12", "opacity-0", "scale-95");
+    card.classList.remove("translate-y-0", "opacity-100", "scale-100");
+    wrap.classList.add("pointer-events-none");
+
+    document.body.style.overflow = "";
+    state.open = false;
+  }
+
+  // ---------- Reset / prefill ----------
+  function resetForm() {
+    errorEl.style.display = "none";
+    errorEl.textContent = "";
+    successBox.classList.add("hidden");
+    addBtn.classList.remove("hidden");
+    addBtn.disabled = false;
+    addText.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>
+        <path d="M17 19m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"/>
+        <path d="M17 17h-11v-14h-2"/>
+        <path d="M6 5l14 1l-1 7h-13"/>
+      </svg>
+      Agregar al carrito
+    `;
+    addBtn.style.background = "";
+
+    negEl.value = "";
+    descEl.value = "";
+
+    // Volver al tab manual
+    setTab("manual");
+  }
+
+  function prefillFromProfile() {
+    const p = getProfile();
+    if (p.nombre) nombreEl.value = p.nombre;
+    if (p.direccion) {
+      if (p.direccion.tipo === "manual" && p.direccion.texto) {
+        dirManualEl.value = p.direccion.texto;
+      } else if (p.direccion.tipo === "mapa" && p.direccion.address) {
+        dirManualEl.value = p.direccion.address;
+      }
+    }
+  }
+
+  // ---------- Tabs ----------
+  function setTab(tab) {
+    state.tab = tab;
+    document.querySelectorAll(".svc-tab").forEach((b) => {
+      const active = b.dataset.tab === tab;
+      b.setAttribute("aria-pressed", active ? "true" : "false");
+      b.classList.toggle("bg-white", active);
+      b.classList.toggle("text-[#377DEC]", active);
+      b.classList.toggle("shadow-sm", active);
+      b.classList.toggle("text-gray-500", !active);
+      b.classList.toggle("bg-transparent", !active);
+    });
+    document.getElementById("svc-panel-manual").classList.toggle("hidden", tab !== "manual");
+    document.getElementById("svc-panel-mapa").classList.toggle("hidden", tab !== "mapa");
+    if (tab === "mapa" && !state.mapReady) initMap();
+  }
+
+  document.querySelectorAll(".svc-tab").forEach((b) => {
+    b.addEventListener("click", () => setTab(b.dataset.tab));
+  });
+
+  // ---------- Mapa (lazy) ----------
+  function initMap() {
+    state.mapReady = true;
+
+    if (!isGmapsConfigured()) {
+      mapEl.innerHTML = `
+        <div class="p-4 text-center text-sm text-gray-500">
+          ⚠️ Mapa no disponible.<br>Usá la opción <b>Escribir</b>.
+        </div>
+      `;
+      return;
+    }
+
+    loadGoogleMaps()
+      .then(() => {
+        mapEl.innerHTML = "";
+        const center = { lat: INITIAL_LAT, lng: INITIAL_LNG };
+        state.map = new google.maps.Map(mapEl, {
+          center,
+          zoom: 15,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+        });
+        state.marker = new google.maps.Marker({
+          position: center,
+          map: state.map,
+          draggable: true,
+          title: "Tu ubicación",
+        });
+        state.geocoder = new google.maps.Geocoder();
+        state.marker.addListener("dragend", onPinMove);
+        state.map.addListener("click", (e) => {
+          state.marker.setPosition(e.latLng);
+          onPinMove();
+        });
+
+        const p = getProfile();
+        if (p.direccion?.tipo === "mapa" && p.direccion.lat != null) {
+          const pos = { lat: p.direccion.lat, lng: p.direccion.lng };
+          state.map.setCenter(pos);
+          state.marker.setPosition(pos);
+        }
+        applyPin();
+      })
+      .catch(() => {
+        mapEl.innerHTML = `
+          <div class="p-4 text-center text-sm text-gray-500">
+            ⚠️ No se pudo cargar el mapa.<br>Usá <b>Escribir</b>.
+          </div>
+        `;
+      });
+  }
+
+  async function onPinMove() {
+    const pos = state.marker.getPosition();
+    state.mapLat = pos.lat();
+    state.mapLng = pos.lng();
+    state.mapAddress = await reverseGeocode(state.geocoder, state.mapLat, state.mapLng);
+    mapAddrText.textContent = state.mapAddress;
+    mapAddrBox.classList.remove("hidden");
+  }
+
+  async function applyPin() {
+    const pos = state.marker.getPosition();
+    state.mapLat = pos.lat();
+    state.mapLng = pos.lng();
+    state.mapAddress = await reverseGeocode(state.geocoder, state.mapLat, state.mapLng);
+    mapAddrText.textContent = state.mapAddress;
+    mapAddrBox.classList.remove("hidden");
+  }
+
+  geoBtn?.addEventListener("click", async () => {
+    geoBtn.disabled = true;
+    const original = geoBtn.innerHTML;
+    geoBtn.innerHTML = "Obteniendo ubicación...";
+    try {
+      const { lat, lng } = await geolocate();
+      if (state.map && state.marker) {
+        const p = new google.maps.LatLng(lat, lng);
+        state.map.setCenter(p);
+        state.map.setZoom(17);
+        state.marker.setPosition(p);
+        await onPinMove();
+      } else {
+        state.mapLat = lat;
+        state.mapLng = lng;
+        state.mapAddress = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        mapAddrText.textContent = state.mapAddress;
+        mapAddrBox.classList.remove("hidden");
+      }
+    } catch (err) {
+      alert(err.message || "No se pudo obtener tu ubicación");
+    } finally {
+      geoBtn.disabled = false;
+      geoBtn.innerHTML = original;
+    }
+  });
+
+  // ---------- Submit ----------
+  function getDireccion() {
+    if (state.tab === "manual") {
+      const texto = dirManualEl.value.trim();
+      if (!texto) return null;
+      return { tipo: "manual", texto };
+    }
+    if (state.mapLat == null || state.mapLng == null) return null;
+    return {
+      tipo: "mapa",
+      address: state.mapAddress || `${state.mapLat.toFixed(6)}, ${state.mapLng.toFixed(6)}`,
+      lat: state.mapLat,
+      lng: state.mapLng,
+    };
+  }
+
+  function showError(msg, focusEl) {
+    errorEl.textContent = `⚠️ ${msg}`;
+    errorEl.style.display = "block";
+    if (focusEl) {
+      focusEl.style.borderColor = "#ef4444";
+      focusEl.focus();
+      setTimeout(() => { focusEl.style.borderColor = ""; }, 2400);
+    }
+  }
+
+  [nombreEl, negEl, descEl, dirManualEl].forEach((el) => {
+    el?.addEventListener("input", () => {
+      errorEl.style.display = "none";
+      errorEl.textContent = "";
+    });
+  });
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (!state.servicio) return;
+
+    const nombre = nombreEl.value.trim();
+    const negocio = negEl.value.trim();
+    const descripcion = descEl.value.trim();
+
+    if (!descripcion && !negocio) {
+      showError("Completá al menos la descripción o la sucursal.", descEl);
+      return;
+    }
+    const direccion = getDireccion();
+    if (!direccion) {
+      if (state.tab === "manual") {
+        showError("Ingresá la dirección de entrega.", dirManualEl);
+      } else {
+        showError("Marcá tu ubicación en el mapa.");
+      }
+      return;
+    }
+
+    addItem({
+      servicio: state.servicio.servicio,
+      slug: state.servicio.slug,
+      imagen: state.servicio.imagen,
+      alt: state.servicio.alt || state.servicio.servicio,
+      nombre,
+      negocio,
+      descripcion,
+      direccion,
+    });
+    setProfile({ nombre, direccion });
+
+    flyToCart();
+    morphButtonToCheck();
+
+    // Mostrar opciones después de la animación
+    setTimeout(() => {
+      successBox.classList.remove("hidden");
+    }, 700);
+  });
+
+  // ---------- Animaciones ----------
+  function flyToCart() {
+    const cartBtn = document.getElementById("cart-toggle");
+    if (!cartBtn || !state.servicio) return;
+
+    const srcRect = img.getBoundingClientRect();
+    const dstRect = cartBtn.getBoundingClientRect();
+
+    const clone = document.createElement("img");
+    clone.src = state.servicio.imagen;
+    clone.alt = "";
+    clone.style.position = "fixed";
+    clone.style.left = srcRect.left + "px";
+    clone.style.top = srcRect.top + "px";
+    clone.style.width = srcRect.width + "px";
+    clone.style.height = srcRect.height + "px";
+    clone.style.objectFit = "contain";
+    clone.style.pointerEvents = "none";
+    clone.style.zIndex = "1300";
+    clone.style.transition = "all 0.85s cubic-bezier(0.5, -0.3, 0.5, 1.4)";
+    clone.style.transform = "rotate(0deg)";
+    flyLayer.appendChild(clone);
+
+    requestAnimationFrame(() => {
+      const dstX = dstRect.left + dstRect.width / 2 - 14;
+      const dstY = dstRect.top + dstRect.height / 2 - 14;
+      clone.style.left = dstX + "px";
+      clone.style.top = dstY + "px";
+      clone.style.width = "28px";
+      clone.style.height = "28px";
+      clone.style.opacity = "0.2";
+      clone.style.transform = "rotate(540deg)";
+    });
+
+    setTimeout(() => {
+      clone.remove();
+      cartBtn.animate(
+        [
+          { transform: "scale(1)" },
+          { transform: "scale(1.3) rotate(-8deg)" },
+          { transform: "scale(0.95) rotate(4deg)" },
+          { transform: "scale(1) rotate(0deg)" },
+        ],
+        { duration: 500, easing: "cubic-bezier(0.34, 1.56, 0.64, 1)" }
+      );
+      const badge = document.getElementById("cart-badge");
+      if (badge) {
+        badge.animate(
+          [
+            { transform: "scale(0.5)", opacity: 0.4 },
+            { transform: "scale(1.5)", opacity: 1 },
+            { transform: "scale(1)", opacity: 1 },
+          ],
+          { duration: 450, easing: "cubic-bezier(0.34, 1.56, 0.64, 1)" }
+        );
+      }
+    }, 850);
+  }
+
+  function morphButtonToCheck() {
+    addBtn.disabled = true;
+    addBtn.style.background = "linear-gradient(to right, #22c55e, #16a34a)";
+    addText.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12l5 5l10 -10"/>
+      </svg>
+      ¡Agregado!
+    `;
+    addBtn.animate(
+      [
+        { transform: "scale(1)" },
+        { transform: "scale(0.96)" },
+        { transform: "scale(1.02)" },
+        { transform: "scale(1)" },
+      ],
+      { duration: 380, easing: "cubic-bezier(0.34, 1.56, 0.64, 1)" }
+    );
+  }
+
+  // ---------- Botones success ----------
+  addAnotherBtn.addEventListener("click", () => {
+    resetForm();
+    descEl.focus();
+  });
+
+  goCartBtn.addEventListener("click", () => {
+    closeModal();
+    setTimeout(() => {
+      document.getElementById("cart-toggle")?.click();
+    }, 250);
+  });
+
+  // ---------- Listeners globales ----------
+  closeBtn.addEventListener("click", closeModal);
+  overlay.addEventListener("click", closeModal);
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && state.open) closeModal();
+  });
+
+  // Evento público
+  window.addEventListener("service:open", (e) => {
+    const slug = e?.detail?.slug;
+    if (typeof slug === "string") openModal(slug);
+  });
+
+  // Delegación: cualquier elemento con [data-service-slug]
+  document.addEventListener("click", (e) => {
+    const target = e.target.closest?.("[data-service-slug]");
+    if (!target) return;
+    e.preventDefault();
+    const slug = target.dataset.serviceSlug;
+    if (slug) {
+      window.dispatchEvent(new CustomEvent("service:open", { detail: { slug } }));
+    }
+  });
+</script>
