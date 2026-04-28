@@ -1,39 +1,84 @@
-<swiper-container
-    className="mySwiper my-10 z-40 w-full block lg:max-w-[1200px]"
-    scrollbar-hide="true"
-    space-between="0"
-    centered-slides="true"
-    autoplay-delay="2500"
-    autoplay-disable-on-interaction="true"
->
-    <swiper-slide
-        ><div class="flex justify-center items-center w-full">
+---
+const slides = [
+  { src: "/procedimiento.avif", alt: "Cómo funciona el procedimiento" },
+  { src: "/mas.avif", alt: "Más servicios" },
+  { src: "/mision.avif", alt: "Nuestra misión" },
+];
+---
+
+<section class="w-full px-3 sm:px-6 max-w-[1400px] mx-auto">
+  <swiper-container
+    class="mandados-swiper block w-full"
+    pagination="true"
+    pagination-clickable="true"
+    navigation="true"
+    autoplay-delay="4500"
+    autoplay-disable-on-interaction="false"
+    loop="true"
+    speed="700"
+    grab-cursor="true"
+  >
+    {
+      slides.map((s) => (
+        <swiper-slide>
+          <div class="slide-card flex justify-center items-center w-full">
             <img
-                src="/procedimiento.avif"
-                class="w-full object-contain max-h-[55vh] md:max-h-[45vh]"
-                alt=""
+              src={s.src}
+              alt={s.alt}
+              loading="lazy"
+              class="slide-img w-full h-auto object-contain max-h-[60vh] sm:max-h-[65vh] md:max-h-[70vh] lg:max-h-[75vh] "
             />
-        </div>
-    </swiper-slide>
-    <swiper-slide
-        ><div class="flex justify-center items-center w-full">
-            <img
-                src="/mas.avif"
-                class="w-full object-contain max-h-[55vh] md:max-h-[45vh]"
-                alt=""
-            />
-        </div>
-    </swiper-slide>
-    <swiper-slide
-        ><div class="flex justify-center items-center w-full">
-            <img
-                src="/mision.avif"
-                class="w-full object-contain max-h-[55vh] md:max-h-[45vh]"
-                alt=""
-            />
-        </div>
-    </swiper-slide>
-</swiper-container>
+          </div>
+        </swiper-slide>
+      ))
+    }
+  </swiper-container>
+</section>
+
 <script
-    src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-element-bundle.min.js"
+  src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-element-bundle.min.js"
 ></script>
+
+<style is:global>
+  .mandados-swiper {
+    --swiper-theme-color: #2563eb;
+    --swiper-navigation-size: 22px;
+    padding-bottom: 48px !important;
+    margin: 24px 0;
+  }
+
+  .mandados-swiper::part(pagination) {
+    bottom: 8px;
+  }
+  .mandados-swiper::part(bullet),
+  .mandados-swiper::part(bullet-active) {
+    width: 8px;
+    height: 8px;
+    transition: all 0.3s ease;
+  }
+  .mandados-swiper::part(bullet-active) {
+    background: #2563eb;
+    width: 28px;
+    border-radius: 4px;
+  }
+
+  .mandados-swiper::part(button-prev):hover,
+  .mandados-swiper::part(button-next):hover {
+    color: #fff;
+    transform: scale(1.08);
+  }
+
+  @media (max-width: 767px) {
+    .mandados-swiper::part(button-prev),
+    .mandados-swiper::part(button-next) {
+      display: none;
+    }
+  }
+
+  .slide-card .slide-img {
+    transition: transform 0.5s ease;
+  }
+  .slide-card:hover .slide-img {
+    transform: scale(1.03);
+  }
+</style>

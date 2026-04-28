@@ -39,6 +39,7 @@ const PRECIO_TRANSFERENCIA = 3000;
   const INITIAL_LNG = parseFloat(root.dataset.initialLng);
 
   const WA_NUMBER = "2271415182";
+  const ALIAS_MP = "mandadosahora";
 
   const items = getItems();
   const profile = getProfile();
@@ -524,23 +525,27 @@ const PRECIO_TRANSFERENCIA = 3000;
       // Guardar nombre + direccion para futuros pedidos
       setProfile({ nombre, direccion });
 
-      const waUrl = buildWhatsappMessage({
-        order,
-        nombre,
-        servicios,
-        direccion,
-        pago: { metodo: state.pagoMetodo, monto },
-        paymentUrl: pref?.paymentUrl || null,
-      });
-      window.open(waUrl, "_blank");
-
       if (state.pagoMetodo === "transferencia") {
-        showTransferSuccess(order, pref);
+        // El WhatsApp se manda recién cuando el cliente toque "Ya pagué"
+        showTransferPayment(order, pref, {
+          nombre,
+          servicios,
+          direccion,
+          pago: { metodo: state.pagoMetodo, monto },
+        });
       } else {
+        const waUrl = buildWhatsappMessage({
+          order,
+          nombre,
+          servicios,
+          direccion,
+          pago: { metodo: state.pagoMetodo, monto },
+          paymentUrl: null,
+        });
+        window.open(waUrl, "_blank");
         showCashSuccess(order);
+        clear();
       }
-
-      clear();
     });
   }
 
@@ -584,40 +589,152 @@ const PRECIO_TRANSFERENCIA = 3000;
   // ==========================================================
   //                       SUCCESS
   // ==========================================================
-  function showTransferSuccess(order, pref) {
+  function showTransferPayment(order, pref, sendData) {
     root.innerHTML = `
-      <div style="background:#fff;border-radius:1rem;padding:2rem 1.5rem;width:100%;text-align:center;box-shadow:0 10px 25px -5px rgba(0,0,0,0.08);border:1px solid #e5e7eb">
-        <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#377DEC" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 0.75rem;display:block">
-          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-          <path d="M3 7m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v6a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z"/>
-          <path d="M3 10l18 0"/>
-          <path d="M7 15l.01 0"/>
-          <path d="M11 15l2 0"/>
-        </svg>
-        <h2 style="font-size:1.35rem;font-weight:700;color:#1f2937;margin-bottom:0.25rem">Pedido creado</h2>
-        <p style="color:#6b7280;font-size:0.875rem;margin-bottom:1rem">
-          Pagá la transferencia para confirmar tu pedido.
-        </p>
-        ${
-          pref.qrImage
-            ? `<img src="${pref.qrImage}" alt="QR de pago" style="margin:0 auto 0.75rem;display:block;border-radius:0.5rem;border:1px solid #e5e7eb" />`
-            : ""
-        }
-        <a href="${pref.paymentUrl}" target="_blank" rel="noopener"
-          style="display:inline-block;background:#00B1EA;color:#fff;padding:0.7rem 1.5rem;border-radius:0.5rem;font-weight:600;text-decoration:none;margin-bottom:0.75rem">
-          Pagar con MercadoPago
-        </a>
-        <p style="font-size:0.7rem;color:#9ca3af;margin:0.25rem 0 1rem">
+      <div style="background:#fff;border-radius:1rem;padding:1.75rem 1.5rem;width:100%;box-shadow:0 10px 25px -5px rgba(0,0,0,0.08);border:1px solid #e5e7eb;display:flex;flex-direction:column;gap:1rem">
+
+        <div style="text-align:center">
+          <h2 style="font-size:1.35rem;font-weight:800;color:#1f2937;margin:0 0 0.25rem">Pagá tu pedido</h2>
+          <p style="color:#6b7280;font-size:0.875rem;margin:0">
+            Transferí <b style="color:#1f2937">$${PRECIO_TRANSFERENCIA}</b> y después enviá el pedido por WhatsApp.
+          </p>
+        </div>
+
+        <div style="display:inline-flex;background:#f3f4f6;border-radius:0.6rem;padding:0.25rem;align-self:center">
+          <button type="button" data-pay-tab="alias" class="ck-pay-tab"
+            style="padding:0.45rem 0.9rem;border-radius:0.5rem;font-size:0.85rem;font-weight:500;background:#fff;color:#377DEC;box-shadow:0 1px 2px rgba(0,0,0,0.05);border:none;cursor:pointer">
+            💳 Alias
+          </button>
+          <button type="button" data-pay-tab="qr" class="ck-pay-tab"
+            style="padding:0.45rem 0.9rem;border-radius:0.5rem;font-size:0.85rem;font-weight:500;background:transparent;color:#6b7280;border:none;cursor:pointer">
+            📱 QR
+          </button>
+        </div>
+
+        <div id="ck-pay-alias" style="display:flex;flex-direction:column;gap:0.6rem;align-items:center">
+          <div style="background:#EBF3FF;border:1px solid rgba(55,125,236,0.25);border-radius:0.75rem;padding:1rem 1.25rem;display:flex;flex-direction:column;align-items:center;gap:0.25rem;width:100%">
+            <span style="font-size:0.7rem;font-weight:700;color:#377DEC;text-transform:uppercase;letter-spacing:0.08em">Alias MercadoPago</span>
+            <span style="font-size:1.35rem;font-weight:800;color:#1f2937;letter-spacing:0.02em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${ALIAS_MP}</span>
+          </div>
+          <button type="button" id="ck-copy-alias"
+            style="background:#377DEC;color:#fff;border:none;padding:0.6rem 1.25rem;border-radius:0.55rem;font-size:0.85rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:0.4rem">
+            📋 Copiar alias
+          </button>
+          <p style="font-size:0.75rem;color:#6b7280;text-align:center;margin:0">
+            Transferí desde tu app bancaria o MercadoPago.
+          </p>
+        </div>
+
+        <div id="ck-pay-qr" style="display:none;flex-direction:column;gap:0.5rem;align-items:center">
+          ${
+            pref?.qrImage
+              ? `<img src="${pref.qrImage}" alt="QR de pago" style="width:200px;height:200px;border-radius:0.5rem;border:1px solid #e5e7eb;background:#fff" />`
+              : `<div style="padding:1rem;color:#6b7280;font-size:0.85rem">QR no disponible</div>`
+          }
+          ${
+            pref?.paymentUrl
+              ? `<a href="${pref.paymentUrl}" target="_blank" rel="noopener"
+                    style="font-size:0.8rem;color:#00B1EA;text-decoration:underline">
+                    Abrir checkout MercadoPago
+                  </a>`
+              : ""
+          }
+          <p style="font-size:0.75rem;color:#6b7280;text-align:center;margin:0">
+            Escaneá con la app de MercadoPago.
+          </p>
+          ${
+            pref?.demo
+              ? `<p style="font-size:0.7rem;color:#b45309;background:#fef3c7;padding:0.4rem 0.6rem;border-radius:0.4rem;margin:0;text-align:center;width:100%">
+                  ⚙️ Modo demo: para pagar de verdad usá el alias.
+                </p>`
+              : ""
+          }
+        </div>
+
+        <p style="font-size:0.7rem;color:#9ca3af;text-align:center;margin:0">
           ID de pedido: <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">${order.id}</code>
         </p>
-        ${
-          pref.demo
-            ? `<p style="font-size:0.7rem;color:#b45309;background:#fef3c7;padding:0.5rem;border-radius:0.5rem;margin-bottom:1rem">
-                ⚙️ Modo demo: la confirmación de pago se hace manualmente desde el panel admin.
-              </p>`
-            : ""
-        }
-        <a href="/" style="display:inline-block;color:#6b7280;font-size:0.875rem;text-decoration:underline">
+
+        <button type="button" id="ck-send-wa"
+          style="width:100%;background:#22c55e;color:#fff;border:none;padding:0.85rem;border-radius:0.75rem;font-size:0.95rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+            <path d="M3 21l1.65 -3.8a9 9 0 1 1 3.4 2.9l-5.05 .9"/>
+            <path d="M9 10a.5 .5 0 0 0 1 0v-1a.5 .5 0 0 0 -1 0v1a5 5 0 0 0 5 5h1a.5 .5 0 0 0 0 -1h-1a.5 .5 0 0 0 0 1"/>
+          </svg>
+          Ya pagué — enviar pedido por WhatsApp
+        </button>
+
+        <a href="/" style="text-align:center;color:#6b7280;font-size:0.8rem;text-decoration:underline">
+          Volver al inicio
+        </a>
+      </div>
+    `;
+
+    document.querySelectorAll(".ck-pay-tab").forEach((b) => {
+      b.addEventListener("click", () => {
+        const tab = b.dataset.payTab;
+        document.getElementById("ck-pay-alias").style.display = tab === "alias" ? "flex" : "none";
+        document.getElementById("ck-pay-qr").style.display = tab === "qr" ? "flex" : "none";
+        document.querySelectorAll(".ck-pay-tab").forEach((bb) => {
+          const active = bb.dataset.payTab === tab;
+          bb.style.background = active ? "#fff" : "transparent";
+          bb.style.color = active ? "#377DEC" : "#6b7280";
+          bb.style.boxShadow = active ? "0 1px 2px rgba(0,0,0,0.05)" : "none";
+        });
+      });
+    });
+
+    document.getElementById("ck-copy-alias").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const original = btn.innerHTML;
+      const flash = () => {
+        btn.innerHTML = "✓ Copiado";
+        setTimeout(() => { btn.innerHTML = original; }, 1500);
+      };
+      try {
+        await navigator.clipboard.writeText(ALIAS_MP);
+        flash();
+      } catch {
+        const tmp = document.createElement("input");
+        tmp.value = ALIAS_MP;
+        document.body.appendChild(tmp);
+        tmp.select();
+        try { document.execCommand("copy"); flash(); } catch {}
+        document.body.removeChild(tmp);
+      }
+    });
+
+    document.getElementById("ck-send-wa").addEventListener("click", () => {
+      const waUrl = buildWhatsappMessage({
+        order,
+        nombre: sendData.nombre,
+        servicios: sendData.servicios,
+        direccion: sendData.direccion,
+        pago: sendData.pago,
+        paymentUrl: pref?.paymentUrl || null,
+      });
+      window.open(waUrl, "_blank");
+      clear();
+      showTransferDone(order);
+    });
+  }
+
+  function showTransferDone(order) {
+    root.innerHTML = `
+      <div style="background:#fff;border-radius:1rem;padding:2rem 1.5rem;width:100%;text-align:center;box-shadow:0 10px 25px -5px rgba(0,0,0,0.08);border:1px solid #e5e7eb">
+        <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 0.75rem;display:block">
+          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+          <path d="M5 12l5 5l10 -10"/>
+        </svg>
+        <h2 style="font-size:1.35rem;font-weight:700;color:#1f2937;margin-bottom:0.25rem">¡Pedido enviado!</h2>
+        <p style="color:#6b7280;font-size:0.875rem;margin-bottom:1rem">
+          Te abrimos WhatsApp con tu pedido. Si no se abrió, revisá los popups del navegador.
+        </p>
+        <p style="font-size:0.7rem;color:#9ca3af;margin-bottom:1rem">
+          ID de pedido: <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">${order.id}</code>
+        </p>
+        <a href="/" style="display:inline-block;background:#377DEC;color:#fff;padding:0.625rem 1.5rem;border-radius:0.5rem;font-weight:500;text-decoration:none">
           Volver al inicio
         </a>
       </div>
