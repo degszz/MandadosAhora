@@ -4,6 +4,9 @@ import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 import CartDrawer from "../components/CartDrawer.astro";
 import ServiceModal from "../components/ServiceModal.astro";
+
+const SB_URL = import.meta.env.PUBLIC_SUPABASE_URL || "";
+const SB_KEY = import.meta.env.PUBLIC_SUPABASE_ANON_KEY || "";
 ---
 
 <!doctype html>
@@ -18,16 +21,246 @@ import ServiceModal from "../components/ServiceModal.astro";
 			href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Poppins:wght@600;700;800&display=swap"
 			rel="stylesheet"
 		/>
+		<meta name="sb-url" content={SB_URL} />
+		<meta name="sb-key" content={SB_KEY} />
 	</head>
 	<body
-		class="h-full from-[#f4f6f7] bg-gradient-to-b via-[#e4e7e9] to-[#616d79]"
+		class="h-full bg-[#f4f6f7]"
 	>
+		<!-- Barra de progreso de scroll (top) -->
+		<div
+			id="scroll-bar"
+			style="position:fixed;top:0;left:0;z-index:9999;height:3px;width:0%;background:linear-gradient(90deg,#377DEC 0%,#67a7f3 60%,#a5c8f8 100%);border-radius:0 2px 2px 0;box-shadow:0 0 8px #377DEC66;pointer-events:none;transition:width 80ms linear;"
+		></div>
+
+		<!-- Scrollbar flotante custom (derecha) -->
+		<div id="scrollbar-track" style="position:fixed;top:0;right:2px;width:14px;height:100vh;z-index:9998;pointer-events:auto;cursor:pointer;">
+			<div id="scrollbar-thumb" style="position:absolute;right:2px;width:6px;min-height:36px;background:#377DEC;border-radius:999px;opacity:0;transition:opacity .3s,width .15s,background .15s;cursor:grab;box-shadow:0 0 6px #377DEC55;"></div>
+		</div>
+
+		<script>
+			(function () {
+				const progressBar = document.getElementById("scroll-bar");
+				const track = document.getElementById("scrollbar-track");
+				const thumb = document.getElementById("scrollbar-thumb");
+				if (!progressBar || !track || !thumb) return;
+
+				let hideTimer = 0;
+				let isDragging = false;
+				let dragStartY = 0;
+				let dragStartScroll = 0;
+
+				function getScrollData() {
+					const h = document.documentElement;
+					const scrollable = h.scrollHeight - h.clientHeight;
+					const pct = scrollable <= 0 ? 0 : window.scrollY / scrollable;
+					const viewRatio = scrollable <= 0 ? 1 : h.clientHeight / h.scrollHeight;
+					return { pct, scrollable, viewRatio };
+				}
+
+				function updatePositions() {
+					const { pct, scrollable, viewRatio } = getScrollData();
+
+					// Progress bar (top)
+					const widthPct = scrollable <= 0 ? 0 : pct * 100;
+					progressBar.style.width = Math.min(widthPct, 100) + "%";
+					progressBar.style.opacity = widthPct > 1 ? "1" : "0";
+
+					// Scrollbar thumb
+					const trackH = track.clientHeight;
+					const thumbH = Math.max(36, trackH * viewRatio);
+					const maxTop = trackH - thumbH;
+					thumb.style.height = thumbH + "px";
+					thumb.style.top = maxTop * pct + "px";
+				}
+
+				function showThumb() {
+					thumb.style.opacity = "0.75";
+					clearTimeout(hideTimer);
+				}
+
+				function scheduleHide() {
+					clearTimeout(hideTimer);
+					if (!isDragging) {
+						hideTimer = setTimeout(function () {
+							thumb.style.opacity = "0";
+						}, 1200);
+					}
+				}
+
+				// Scroll → update + show/hide
+				window.addEventListener("scroll", function () {
+					updatePositions();
+					showThumb();
+					scheduleHide();
+				}, { passive: true });
+
+				// Hover sobre el track → mostrar thumb más grueso
+				track.addEventListener("mouseenter", function () {
+					showThumb();
+					thumb.style.width = "10px";
+					thumb.style.opacity = "0.9";
+				});
+				track.addEventListener("mouseleave", function () {
+					if (!isDragging) {
+						thumb.style.width = "6px";
+						scheduleHide();
+					}
+				});
+
+				// Click en track → saltar a esa posición
+				track.addEventListener("mousedown", function (e) {
+					if (e.target === thumb) return;
+					const rect = track.getBoundingClientRect();
+					const clickRatio = (e.clientY - rect.top) / rect.height;
+					const { scrollable } = getScrollData();
+					window.scrollTo({ top: clickRatio * scrollable, behavior: "smooth" });
+				});
+
+				// Drag del thumb
+				thumb.addEventListener("mousedown", function (e) {
+					e.preventDefault();
+					isDragging = true;
+					dragStartY = e.clientY;
+					dragStartScroll = window.scrollY;
+					thumb.style.cursor = "grabbing";
+					thumb.style.background = "#67a7f3";
+					thumb.style.width = "10px";
+					thumb.style.opacity = "1";
+					document.body.style.userSelect = "none";
+				});
+
+				window.addEventListener("mousemove", function (e) {
+					if (!isDragging) return;
+					const deltaY = e.clientY - dragStartY;
+					const trackH = track.clientHeight;
+					const { scrollable, viewRatio } = getScrollData();
+					const thumbH = Math.max(36, trackH * viewRatio);
+					const maxTop = trackH - thumbH;
+					const scrollDelta = (deltaY / maxTop) * scrollable;
+					window.scrollTo(0, dragStartScroll + scrollDelta);
+				});
+
+				window.addEventListener("mouseup", function () {
+					if (!isDragging) return;
+					isDragging = false;
+					thumb.style.cursor = "grab";
+					thumb.style.background = "#377DEC";
+					thumb.style.width = "6px";
+					document.body.style.userSelect = "";
+					scheduleHide();
+				});
+
+				// Touch support (mobile)
+				thumb.addEventListener("touchstart", function (e) {
+					isDragging = true;
+					dragStartY = e.touches[0].clientY;
+					dragStartScroll = window.scrollY;
+					thumb.style.opacity = "1";
+					thumb.style.width = "10px";
+				}, { passive: true });
+
+				window.addEventListener("touchmove", function (e) {
+					if (!isDragging) return;
+					const deltaY = e.touches[0].clientY - dragStartY;
+					const trackH = track.clientHeight;
+					const { scrollable, viewRatio } = getScrollData();
+					const thumbH = Math.max(36, trackH * viewRatio);
+					const maxTop = trackH - thumbH;
+					const scrollDelta = (deltaY / maxTop) * scrollable;
+					window.scrollTo(0, dragStartScroll + scrollDelta);
+				}, { passive: true });
+
+				window.addEventListener("touchend", function () {
+					if (!isDragging) return;
+					isDragging = false;
+					thumb.style.width = "6px";
+					scheduleHide();
+				});
+
+				// Resize → recalcular
+				window.addEventListener("resize", updatePositions, { passive: true });
+
+				// Init
+				updatePositions();
+				showThumb();
+				scheduleHide();
+			})();
+		</script>
+
+		<!-- Toast flotante: buscamos repartidores (controlado desde Supabase) -->
+		<div id="hiring-toast" style="position:fixed;bottom:20px;left:20px;z-index:1050;background:#fff;border-radius:16px;padding:12px 14px;box-shadow:0 6px 28px rgba(37,99,235,0.16),0 1px 4px rgba(0,0,0,0.08);border:1.5px solid #dbeafe;display:none;align-items:center;gap:10px;font-family:'Inter',sans-serif;max-width:290px;transform:translateY(120%);opacity:0;transition:transform .4s cubic-bezier(.175,.885,.32,1.275),opacity .3s ease;">
+			<div style="width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#2563eb,#3b82f6);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+				<span style="font-size:1.15rem;">🛵</span>
+			</div>
+			<div style="flex:1;min-width:0;">
+				<div style="font-size:0.8rem;font-weight:700;color:#1e293b;line-height:1.3;">Buscamos repartidores</div>
+				<a href="/repartidor" style="font-size:0.72rem;color:#2563eb;text-decoration:none;font-weight:600;">Sumate al equipo →</a>
+			</div>
+			<button id="dismiss-toast" style="background:none;border:none;color:#94a3b8;font-size:1.2rem;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;" aria-label="Cerrar">×</button>
+		</div>
+
 		<Header />
-		<main class="mt-[90px] md:mt-[90px]">
+		<main class="mt-[75px] md:mt-[75px]">
 			<slot />
 		</main>
-		<Footer />
 		<CartDrawer />
 		<ServiceModal />
+
+		<script>
+			// Toast flotante: buscamos repartidores (controlado por Supabase settings)
+			(function() {
+				var toast = document.getElementById('hiring-toast');
+				var dismissBtn = document.getElementById('dismiss-toast');
+				if (!toast) return;
+
+				// Si el usuario ya lo cerró en esta sesión, no mostrar
+				if (sessionStorage.getItem('hiring_toast_off')) return;
+
+				function showToast() {
+					toast.style.display = 'flex';
+					// Trigger reflow para que la transición funcione
+					toast.offsetHeight;
+					toast.style.transform = 'translateY(0)';
+					toast.style.opacity = '1';
+				}
+
+				function hideToast() {
+					toast.style.transform = 'translateY(120%)';
+					toast.style.opacity = '0';
+					setTimeout(function() { toast.style.display = 'none'; }, 400);
+					sessionStorage.setItem('hiring_toast_off', '1');
+				}
+
+				if (dismissBtn) dismissBtn.addEventListener('click', hideToast);
+
+				// Leer setting desde Supabase
+				var sbUrl = null;
+				var sbKey = null;
+				try {
+					// Buscar las env vars desde un meta tag o el .env inline
+					var metaUrl = document.querySelector('meta[name="sb-url"]');
+					var metaKey = document.querySelector('meta[name="sb-key"]');
+					if (metaUrl) sbUrl = metaUrl.content;
+					if (metaKey) sbKey = metaKey.content;
+				} catch(e) {}
+
+				if (!sbUrl || !sbKey) return;
+
+				fetch(sbUrl + '/rest/v1/settings?key=eq.hiring_active&select=value', {
+					headers: {
+						'apikey': sbKey,
+						'Authorization': 'Bearer ' + sbKey,
+						'Accept-Profile': 'mandados'
+					}
+				}).then(function(r) { return r.ok ? r.json() : []; })
+				.then(function(rows) {
+					if (rows.length && rows[0].value === true) {
+						// Mostrar con delay para no interrumpir carga
+						setTimeout(showToast, 2500);
+					}
+				}).catch(function() {});
+			})();
+		</script>
 	</body>
 </html>

@@ -3,7 +3,10 @@
     "allow": [
       "Bash(npm run build:*)",
       "Bash(rm \"C:/Users/Maxi/Desktop/dev/fino/src/pages/servicios/24horas.astro\" \"C:/Users/Maxi/Desktop/dev/fino/src/pages/servicios/carniceria.astro\" \"C:/Users/Maxi/Desktop/dev/fino/src/pages/servicios/farmacia.astro\" \"C:/Users/Maxi/Desktop/dev/fino/src/pages/servicios/lavanderia.astro\" \"C:/Users/Maxi/Desktop/dev/fino/src/pages/servicios/libreria.astro\" \"C:/Users/Maxi/Desktop/dev/fino/src/pages/servicios/licoreria.astro\" \"C:/Users/Maxi/Desktop/dev/fino/src/pages/servicios/mas.astro\" \"C:/Users/Maxi/Desktop/dev/fino/src/pages/servicios/mercado.astro\" \"C:/Users/Maxi/Desktop/dev/fino/src/pages/servicios/panaderia.astro\" \"C:/Users/Maxi/Desktop/dev/fino/src/pages/servicios/verduleria.astro\")",
-      "Bash(rmdir \"C:/Users/Maxi/Desktop/dev/fino/src/pages/servicios\")"
+      "Bash(rmdir \"C:/Users/Maxi/Desktop/dev/fino/src/pages/servicios\")",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":4321\")",
+      "Bash(findstr \"LISTENING\")"
     ]
   }
 }

@@ -1,0 +1,11 @@
+---
+import Layout from "../layouts/Layout.astro";
+import CustomerTracker from "../components/CustomerTracker.jsx";
+import "../styles/global.css";
+---
+
+<Layout title="Seguimiento de pedido — Mandados Ahora">
+  <div class="w-full flex justify-center my-8 px-4">
+    <CustomerTracker client:load />
+  </div>
+</Layout>

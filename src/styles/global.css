@@ -9,3 +9,11 @@ h1, h2, h3{
 span, p, a , button, input, textarea{
     font-family: 'Inter', sans-serif;
 }
+
+/* ── Ocultar scrollbar nativo ── */
+html {
+  scrollbar-width: none;          /* Firefox */
+}
+html::-webkit-scrollbar {
+  display: none;                  /* Webkit */
+}

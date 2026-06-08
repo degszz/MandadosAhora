@@ -1,0 +1,188 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import "../../styles/global.css";
+---
+
+<Layout title="Iniciando sesión...">
+  <div class="w-full flex items-center justify-center my-16 px-4">
+    <div class="bg-white shadow-lg rounded-2xl p-8 w-full max-w-md text-center border border-gray-100">
+      <div id="cb-spinner" class="flex justify-center mb-3">
+        <div class="w-12 h-12 rounded-full border-4 border-[#377DEC]/20 border-t-[#377DEC] animate-spin"></div>
+      </div>
+      <h1 id="cb-title" class="text-lg font-bold text-gray-800 mb-1">Iniciando sesión...</h1>
+      <p id="cb-msg" class="text-sm text-gray-500">Validando con Google.</p>
+
+      <p id="cb-err" class="hidden text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3 text-left" role="alert"></p>
+
+      <div id="cb-actions" class="hidden mt-4 flex flex-col gap-2">
+        <a
+          href="/repartidor"
+          class="block w-full bg-[#377DEC] hover:bg-[#2563c0] text-white rounded-lg py-2.5 font-semibold text-sm transition-colors no-underline"
+        >
+          Volver a intentar
+        </a>
+        <button
+          id="cb-clear-btn"
+          type="button"
+          class="block w-full border border-gray-200 hover:border-red-300 hover:text-red-600 hover:bg-red-50 text-gray-600 rounded-lg py-2 text-xs font-medium transition-colors"
+        >
+          Limpiar storage y reintentar
+        </button>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { getSupabase, getMyProfile } from "../../scripts/supabase.js";
+
+  const titleEl = document.getElementById("cb-title");
+  const msgEl = document.getElementById("cb-msg");
+  const errBox = document.getElementById("cb-err");
+  const spinner = document.getElementById("cb-spinner");
+  const actions = document.getElementById("cb-actions");
+
+  function showError(text, hint = "") {
+    spinner?.classList.add("hidden");
+    titleEl.textContent = "No se pudo iniciar sesión";
+    msgEl.textContent = "";
+    if (errBox) {
+      errBox.innerHTML = `⚠️ <b>${text}</b>${hint ? `<br><span style="font-size:0.75rem;display:block;margin-top:0.4rem;color:#7f1d1d">${hint}</span>` : ""}`;
+      errBox.classList.remove("hidden");
+    }
+    actions?.classList.remove("hidden");
+  }
+
+  function clearAuthStorage() {
+    try {
+      // Storage key dedicada de Mandados Ahora + cualquier residuo PKCE
+      const keys = Object.keys(localStorage);
+      keys.forEach((k) => {
+        if (
+          k.startsWith("mandados-auth-token") ||
+          k.startsWith("sb-") ||
+          k.includes("code-verifier")
+        ) {
+          localStorage.removeItem(k);
+        }
+      });
+    } catch {}
+  }
+
+  document.getElementById("cb-clear-btn")?.addEventListener("click", () => {
+    clearAuthStorage();
+    window.location.replace("/repartidor");
+  });
+
+  async function run() {
+    const sb = getSupabase();
+    if (!sb) {
+      showError("Supabase no está configurado.", "Revisá que existan PUBLIC_SUPABASE_URL y PUBLIC_SUPABASE_ANON_KEY en .env y reiniciá el dev server.");
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    const next = (() => {
+      try { return sessionStorage.getItem("mandados:auth:next") || "/repartidor/panel"; }
+      catch { return "/repartidor/panel"; }
+    })();
+    const errorParam = url.searchParams.get("error");
+    const errorDescription = url.searchParams.get("error_description");
+    const code = url.searchParams.get("code");
+
+    // Diagnóstico para consola: si algo se rompe la siguiente info es clave
+    console.info("[auth/callback] href:", window.location.href);
+    console.info("[auth/callback] code present:", !!code, "error param:", errorParam);
+    try {
+      const verifierKeys = Object.keys(localStorage).filter(k => k.includes("verifier"));
+      console.info("[auth/callback] PKCE verifier keys in storage:", verifierKeys);
+    } catch {}
+
+    // Caso 1: Google/Supabase devolvió un error (provider error, deny, etc.)
+    if (errorParam) {
+      showError(
+        decodeURIComponent(errorDescription || errorParam),
+        "El proveedor (Google/Supabase) rechazó la autenticación."
+      );
+      return;
+    }
+
+    // Caso 2: no llegó código (URL accedida directamente o sin params)
+    if (!code) {
+      // Quizá ya hay sesión (refresh manual del callback)
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        msgEl.textContent = "Sesión activa, redirigiendo...";
+        await routeByProfile(next);
+        return;
+      }
+      showError(
+        "No llegó el código de autorización.",
+        "Volvé a iniciar sesión desde el botón."
+      );
+      return;
+    }
+
+    // Caso 3: tenemos code, lo canjeamos manualmente
+    try {
+      msgEl.textContent = "Canjeando código...";
+      const { error } = await sb.auth.exchangeCodeForSession(code);
+      if (error) throw error;
+    } catch (err) {
+      console.error("[auth/callback] exchange error:", err);
+      const msg = (err?.message || "").toLowerCase();
+      const isFlowState  = /flow state/.test(msg);
+      const isPkce       = /verifier/.test(msg);
+      const isUsedCode   = /already.*used|invalid.*code/.test(msg);
+
+      // Limpiar storage automáticamente para que un retry arranque limpio
+      clearAuthStorage();
+
+      let hint;
+      if (isFlowState || isUsedCode) {
+        hint = `El código de autorización <b>ya fue usado o expiró</b>.
+          Esto pasa si refrescaste esta página, si tardaste &gt;10 min, o si el
+          <b>Site URL</b> del dashboard de Supabase no es <code style='background:#fef2f2;padding:1px 4px;border-radius:3px'>http://localhost:4321</code>.
+          Limpié el storage por vos — hacé click en <b>Volver a intentar</b> para arrancar un flujo nuevo.`;
+      } else if (isPkce) {
+        hint = `Falta el code verifier en el storage del navegador.
+          Suele pasar cuando empezás el flow en una pestaña y volvés en otra, o cuando los <b>Redirect URLs</b>
+          del dashboard no incluyen <code style='background:#fef2f2;padding:1px 4px;border-radius:3px'>http://localhost:4321/auth/callback</code>.`;
+      } else {
+        hint = "Revisá la consola para el error completo y la configuración de OAuth en el dashboard de Supabase.";
+      }
+      showError(err?.message || "No se pudo canjear el código.", hint);
+      return;
+    }
+
+    msgEl.textContent = "Cargando tu perfil...";
+    await routeByProfile(next);
+  }
+
+  async function routeByProfile(next) {
+    try {
+      const profile = await getMyProfile();
+      if (profile?.role === "admin") {
+        window.location.replace("/admin");
+        return;
+      }
+      if (profile?.role === "repartidor" && !profile.verified) {
+        window.location.replace("/repartidor/espera");
+        return;
+      }
+      if (profile?.role === "repartidor" && profile.verified) {
+        window.location.replace("/repartidor/panel");
+        return;
+      }
+      // Sin profile: el trigger del DB debería haberlo creado. Si no, fallback.
+      window.location.replace(next);
+    } catch (e) {
+      showError(
+        e?.message || "No se pudo cargar el perfil.",
+        "El schema <code>mandados</code> debe estar en <b>Exposed schemas</b> del dashboard."
+      );
+    }
+  }
+
+  run();
+</script>

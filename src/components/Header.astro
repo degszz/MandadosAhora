@@ -17,7 +17,9 @@ const Links = [
 ---
 
 <header
-    class="z-[1000] bg-[#F3F5F6] fixed top-0 text-white-950 h-[90px] md:h-[90px] w-full flex items-center justify-between"
+    id="main-header"
+    class="z-[1000] fixed top-0 text-white-950 h-[75px] md:h-[75px] w-full flex items-center justify-between"
+    style="background:transparent;transition:background .3s ease,backdrop-filter .3s ease,box-shadow .3s ease;"
 >
     <div
         class="flex pl-5 lg:min-w-[190px] items-center justify-center w-fit text-center h-full lg:w-[200px]"
@@ -31,9 +33,7 @@ const Links = [
                 class="scale-90 duration-200 hover:scale-110 hover:cursor-pointer flex w-full"
             >
                 <img src="/logo.avif" class="w-[70px]" alt="" />
-                <p class="text-start w-fit text-[#377DEC]">
-                    <b>Mandados Ahora</b>
-                </p>
+
             </a>
         </div>
     </div>
@@ -41,12 +41,12 @@ const Links = [
         <div class="hidden md:flex">
             {
                 Links.map((link) => (
-                    <div class="border-l hover:underline dark:border-white border-black">
+                    <div class="border-l text-gray-500 hover:text-[#377DEC] border-gray-300/50">
                         <a
                             href={link.link}
-                            class="text-start text-lg block px-3 dark:text-white dark:hover:text-kai-text rounded md:bg-transparen  hover:text-kai-text"
+                            class="text-start text-lg block  px-3 rounded md:bg-transparent  "
                         >
-                            {link.name}
+                            <b>{link.name}</b>
                         </a>
                     </div>
                 ))
@@ -119,3 +119,24 @@ const Links = [
         </a>
     </div>
 </header>
+
+<script>
+  const hdr = document.getElementById('main-header');
+  if (hdr) {
+    const update = () => {
+      if (window.scrollY > 40) {
+        hdr.style.background = 'rgba(255,255,255,0.85)';
+        hdr.style.backdropFilter = 'blur(14px)';
+        hdr.style.webkitBackdropFilter = 'blur(14px)';
+        hdr.style.boxShadow = '0 1px 10px rgba(0,0,0,0.06)';
+      } else {
+        hdr.style.background = 'transparent';
+        hdr.style.backdropFilter = 'none';
+        hdr.style.webkitBackdropFilter = 'none';
+        hdr.style.boxShadow = 'none';
+      }
+    };
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+  }
+</script>

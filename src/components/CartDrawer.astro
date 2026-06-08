@@ -93,6 +93,17 @@
 
   <!-- Footer con acciones -->
   <div id="cart-footer" class="p-4 bg-white border-t border-gray-200 space-y-2">
+    <!-- Resumen de precio -->
+    <div id="cart-price-summary" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:0.6rem;padding:0.6rem 0.75rem;display:flex;flex-direction:column;gap:0.25rem">
+      <div style="display:flex;justify-content:space-between;font-size:0.78rem;color:#6b7280">
+        <span id="cart-price-detail">0 servicios × $3.000</span>
+        <span id="cart-subtotal">$0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:0.88rem;font-weight:700;color:#1f2937;border-top:1px solid #e5e7eb;padding-top:0.25rem;margin-top:0.1rem">
+        <span>Total</span>
+        <span id="cart-total" style="color:#377DEC">$0</span>
+      </div>
+    </div>
     <button
       id="cart-clear-btn"
       class="w-full border-2 border-gray-200 text-gray-500 rounded-lg py-2 text-sm font-medium hover:border-red-300 hover:text-red-500 hover:bg-red-50 transition-all duration-150"
@@ -169,6 +180,22 @@
   function renderItems() {
     const items = getItems();
 
+    const PRICE_REGULAR = 3000;
+    const PRICE_24H_OFFHOURS = 3500;
+
+    function is24hOffHours() {
+      const now = new Date();
+      const h = now.getHours();
+      const day = now.getDay(); // 0=dom
+      // Fuera de horario laboral: antes de 8, después de 21, o domingo
+      return h < 8 || h >= 21 || day === 0;
+    }
+
+    function priceFor(item) {
+      if (item.slug === "24horas" && is24hOffHours()) return PRICE_24H_OFFHOURS;
+      return PRICE_REGULAR;
+    }
+
     // Badge
     if (items.length > 0) {
       badge.textContent = String(items.length);
@@ -177,8 +204,19 @@
       badge.classList.add("hidden");
     }
 
-    // Footer
+    // Footer + price summary
     footer.style.display = items.length > 0 ? "" : "none";
+    if (items.length > 0) {
+      const total = items.reduce((sum, it) => sum + priceFor(it), 0);
+      const fmt = (n) => "$" + n.toLocaleString("es-AR");
+      const has24h = items.some(it => it.slug === "24horas" && is24hOffHours());
+      const detail = has24h
+        ? `${items.length} servicio${items.length > 1 ? "s" : ""} (incluye 24hs nocturno)`
+        : `${items.length} servicio${items.length > 1 ? "s" : ""} × ${fmt(PRICE_REGULAR)}`;
+      document.getElementById("cart-price-detail").textContent = detail;
+      document.getElementById("cart-subtotal").textContent = fmt(total);
+      document.getElementById("cart-total").textContent = fmt(total);
+    }
 
     if (items.length === 0) {
       lastRenderedIds = "";
@@ -219,7 +257,7 @@
             ${avatar}
             <div class="min-w-0">
               <p style="font-weight:600;color:#1f2937;font-size:0.875rem" class="truncate">${escapeHtml(item.servicio)}</p>
-              <p style="font-size:0.75rem;color:#9ca3af">Servicio de mandado</p>
+              <p style="font-size:0.75rem;color:${priceFor(item) > 3000 ? '#d97706' : '#377DEC'};font-weight:600">$${priceFor(item).toLocaleString("es-AR")}</p>
             </div>
           </div>
           <button

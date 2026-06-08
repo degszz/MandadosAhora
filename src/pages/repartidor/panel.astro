@@ -1,0 +1,13 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import "../../styles/global.css";
+import RepartidorPanel from "../../components/RepartidorPanel.jsx";
+---
+
+<Layout title="Panel de repartidor · Mandados Ahora">
+  <div class="w-full flex justify-center my-6 px-3">
+    <div class="w-full max-w-3xl">
+      <RepartidorPanel mode="repartidor" todayOnly={true} client:only="preact" />
+    </div>
+  </div>
+</Layout>

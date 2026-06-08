@@ -1,11 +1,12 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import "../styles/global.css";
-import { GOOGLE_MAPS_API_KEY, INITIAL_LAT, INITIAL_LNG } from "../scripts/gmaps.js";
+import { INITIAL_LAT, INITIAL_LNG } from "../scripts/gmaps.js";
 
 const PRECIO_TRANSFERENCIA = 3000;
 ---
 
+<style>@keyframes ck-spin{to{transform:rotate(360deg)}}</style>
 <Layout title="Checkout">
   <div class="w-full flex justify-center my-8 px-4">
     <div
@@ -24,22 +25,54 @@ const PRECIO_TRANSFERENCIA = 3000;
   import { getItems, clear } from "../scripts/cart.js";
   import { SERVICIOS } from "../data/servicios.js";
   import { createOrder, updateOrder } from "../scripts/orders.js";
-  import { createPaymentPreference } from "../scripts/mercadopago.js";
+  import { createStripeSession, createMPPreference } from "../scripts/mercadopago.js";
   import { getProfile, setProfile } from "../scripts/profile.js";
+
   import {
-    loadGoogleMaps,
+    loadLeaflet,
+    createMap,
     reverseGeocode,
     geolocate,
-    isGmapsConfigured,
+    mapsLink,
   } from "../scripts/gmaps.js";
 
   const root = document.getElementById("checkout-root");
-  const PRECIO_TRANSFERENCIA = parseInt(root.dataset.precioTransferencia, 10);
   const INITIAL_LAT = parseFloat(root.dataset.initialLat);
   const INITIAL_LNG = parseFloat(root.dataset.initialLng);
 
   const WA_NUMBER = "2271415182";
   const ALIAS_MP = "mandadosahora";
+
+  // Pricing
+  const PRICE_REGULAR = 3000;
+  const PRICE_24H_OFFHOURS = 3500;
+  const COMMISSION_REGULAR = 2000;
+  const COMMISSION_24H_OFFHOURS = 3500;
+
+  function is24hOffHours() {
+    const now = new Date();
+    const h = now.getHours();
+    const day = now.getDay();
+    return h < 8 || h >= 21 || day === 0;
+  }
+
+  function priceFor(item) {
+    if ((item.slug === "24horas") && is24hOffHours()) return PRICE_24H_OFFHOURS;
+    return PRICE_REGULAR;
+  }
+
+  function commissionFor(item) {
+    if ((item.slug === "24horas") && is24hOffHours()) return COMMISSION_24H_OFFHOURS;
+    return COMMISSION_REGULAR;
+  }
+
+  function generateDeliveryCode() {
+    return String(Math.floor(100000 + Math.random() * 900000));
+  }
+
+  function formatARS(n) {
+    return "$" + Number(n).toLocaleString("es-AR");
+  }
 
   const items = getItems();
   const profile = getProfile();
@@ -50,15 +83,13 @@ const PRECIO_TRANSFERENCIA = 3000;
   );
 
   const state = {
-    pagoMetodo: null, // "transferencia" | "efectivo"
-    dirTab: "manual",
+    pagoMetodo: null, // "stripe" | "mercadopago" | "efectivo"
+    locMode: "empty", // "empty" | "loading" | "result" | "error"
     map: null,
     marker: null,
-    geocoder: null,
     mapLat: null,
     mapLng: null,
     mapAddress: "",
-    mapReady: false,
   };
 
   const escapeHtml = (s) =>
@@ -203,18 +234,22 @@ const PRECIO_TRANSFERENCIA = 3000;
           <h3 style="font-size:0.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">
             Dirección de entrega *
           </h3>
-          <div id="ck-tabs" style="display:inline-flex;background:#f3f4f6;border-radius:0.5rem;padding:0.25rem;margin-bottom:0.5rem">
-            <button type="button" data-ck-tab="manual" class="ck-tab"
-              style="padding:0.4rem 0.8rem;border-radius:0.4rem;font-size:0.85rem;font-weight:500;background:#fff;color:#377DEC;box-shadow:0 1px 2px rgba(0,0,0,0.05);border:none;cursor:pointer">
-              ✍️ Escribir
-            </button>
-            <button type="button" data-ck-tab="mapa" class="ck-tab"
-              style="padding:0.4rem 0.8rem;border-radius:0.4rem;font-size:0.85rem;font-weight:500;background:transparent;color:#6b7280;border:none;cursor:pointer">
-              📍 En el mapa
-            </button>
-          </div>
 
-          <div id="ck-panel-manual">
+          <!-- Estado: sin ubicación -->
+          <div id="ck-loc-empty" style="display:flex;flex-direction:column;gap:0.5rem">
+            <button type="button" id="ck-geo-btn"
+              style="width:100%;background:linear-gradient(135deg,#377DEC 0%,#5b9bf5 100%);color:#fff;border:none;border-radius:0.875rem;padding:0.85rem;font-size:0.9rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem;box-shadow:0 4px 12px rgba(55,125,236,0.3)">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v2"/><path d="M12 20v2"/><path d="M2 12h2"/><path d="M20 12h2"/>
+                <circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="9"/>
+              </svg>
+              Compartir mi ubicación
+            </button>
+            <div style="display:flex;align-items:center;gap:0.5rem">
+              <div style="flex:1;height:1px;background:#e5e7eb"></div>
+              <span style="font-size:0.72rem;color:#9ca3af">o escribila</span>
+              <div style="flex:1;height:1px;background:#e5e7eb"></div>
+            </div>
             <input
               id="ck-dir-manual"
               type="text"
@@ -224,19 +259,67 @@ const PRECIO_TRANSFERENCIA = 3000;
               onfocus="this.style.borderColor='#377DEC'"
               onblur="this.style.borderColor='#d1d5db'"
             />
+            <p style="font-size:0.7rem;color:#9ca3af;margin:0;display:flex;align-items:center;gap:0.25rem">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              Activá la ubicación en tu celular para compartirla
+            </p>
           </div>
 
-          <div id="ck-panel-mapa" style="display:none;flex-direction:column;gap:0.5rem">
-            <button type="button" id="ck-geo-btn"
-              style="width:100%;background:#EBF3FF;color:#377DEC;border:1px solid rgba(55,125,236,0.3);border-radius:0.6rem;padding:0.55rem;font-size:0.85rem;font-weight:500;cursor:pointer">
-              📍 Usar mi ubicación
+          <!-- Estado: obteniendo GPS -->
+          <div id="ck-loc-loading" style="display:none">
+            <div style="background:#EBF3FF;border:1px solid #bfd7ff;border-radius:0.75rem;padding:1rem;text-align:center">
+              <div style="width:28px;height:28px;margin:0 auto 0.4rem;border-radius:50%;border:3px solid #bfd7ff;border-top-color:#377DEC;animation:ck-spin 0.8s linear infinite"></div>
+              <p style="font-size:0.82rem;color:#1e40af;font-weight:500;margin:0">Obteniendo tu ubicación...</p>
+              <p style="font-size:0.7rem;color:#6b7280;margin:0.2rem 0 0">Aceptá el permiso si el navegador lo pide</p>
+            </div>
+          </div>
+
+          <!-- Estado: ubicación obtenida -->
+          <div id="ck-loc-result" style="display:none;flex-direction:column;gap:0.4rem">
+            <div style="background:#dcfce7;border:1px solid #86efac;border-radius:0.6rem;padding:0.5rem 0.65rem;display:flex;align-items:center;gap:0.4rem">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5l10 -10"/></svg>
+              <span style="font-size:0.8rem;font-weight:600;color:#166534">Ubicación compartida</span>
+            </div>
+            <div id="ck-map" style="width:100%;height:160px;border-radius:0.6rem;border:1px solid #e5e7eb;overflow:hidden;background:#f3f4f6"></div>
+            <div style="background:#EBF3FF;border-radius:0.5rem;padding:0.5rem 0.65rem;display:flex;align-items:flex-start;gap:0.4rem">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#377DEC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px"><path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/><path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z"/></svg>
+              <span id="ck-map-addr-text" style="font-size:0.78rem;color:#1e40af;line-height:1.3">—</span>
+            </div>
+            <div style="display:flex;gap:0.35rem">
+              <a id="ck-maps-link" href="#" target="_blank" rel="noopener" style="flex:1;text-align:center;font-size:0.72rem;color:#377DEC;font-weight:500;padding:0.35rem;border:1px solid #bfd7ff;border-radius:0.4rem;text-decoration:none;background:#fff">
+                Ver en Google Maps
+              </a>
+              <button type="button" id="ck-loc-change" style="flex:1;font-size:0.72rem;color:#6b7280;font-weight:500;padding:0.35rem;border:1px solid #e5e7eb;border-radius:0.4rem;background:#fff;cursor:pointer">
+                Cambiar
+              </button>
+            </div>
+          </div>
+
+          <!-- Estado: error -->
+          <div id="ck-loc-error" style="display:none;flex-direction:column;gap:0.4rem">
+            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:0.6rem;padding:0.6rem;display:flex;align-items:flex-start;gap:0.4rem">
+              <span style="font-size:1rem;flex-shrink:0">⚠️</span>
+              <div>
+                <p id="ck-loc-error-msg" style="font-size:0.8rem;font-weight:600;color:#991b1b;margin:0">Error de ubicación</p>
+                <p style="font-size:0.7rem;color:#7f1d1d;margin:0.15rem 0 0">Verificá que la ubicación esté activada: <b>Ajustes > Ubicación</b></p>
+              </div>
+            </div>
+            <button type="button" id="ck-loc-retry" style="width:100%;background:#377DEC;color:#fff;border:none;border-radius:0.5rem;padding:0.55rem;font-size:0.82rem;font-weight:600;cursor:pointer">
+              Reintentar
             </button>
-            <div id="ck-map" style="width:100%;height:220px;border-radius:0.6rem;border:1px solid #e5e7eb;background:#f3f4f6;display:flex;align-items:center;justify-content:center;font-size:0.85rem;color:#6b7280">
-              Cargando mapa...
+            <div style="display:flex;align-items:center;gap:0.5rem">
+              <div style="flex:1;height:1px;background:#e5e7eb"></div>
+              <span style="font-size:0.72rem;color:#9ca3af">o escribila</span>
+              <div style="flex:1;height:1px;background:#e5e7eb"></div>
             </div>
-            <div id="ck-map-addr" style="display:none;background:#EBF3FF;color:#1e40af;padding:0.5rem 0.75rem;border-radius:0.5rem;font-size:0.8rem">
-              <b>Dirección:</b> <span id="ck-map-addr-text">—</span>
-            </div>
+            <input
+              id="ck-dir-manual-fb"
+              type="text"
+              placeholder="Calle y número"
+              style="width:100%;padding:0.6rem 0.85rem;border:1px solid #d1d5db;border-radius:0.6rem;outline:none;font-size:0.9rem"
+              onfocus="this.style.borderColor='#377DEC'"
+              onblur="this.style.borderColor='#d1d5db'"
+            />
           </div>
         </div>
 
@@ -245,24 +328,33 @@ const PRECIO_TRANSFERENCIA = 3000;
           <h3 style="font-size:0.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">
             Método de pago *
           </h3>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.7rem">
-            <button type="button" class="pago-card" data-metodo="transferencia"
-              style="background:#fff;border:2px solid #e5e7eb;border-radius:0.875rem;padding:1rem;text-align:left;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:0.25rem">
-              <div style="display:flex;align-items:center;gap:0.5rem">
-                <span style="font-size:1.25rem">🏦</span>
-                <b style="color:#1f2937;font-size:0.95rem">Transferencia</b>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.6rem">
+            <button type="button" class="pago-card" data-metodo="stripe"
+              style="background:#fff;border:2px solid #e5e7eb;border-radius:0.875rem;padding:0.85rem;text-align:left;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:0.2rem">
+              <div style="display:flex;align-items:center;gap:0.4rem">
+                <span style="font-size:1.15rem">💳</span>
+                <b style="color:#1f2937;font-size:0.85rem">Tarjeta</b>
               </div>
-              <span style="color:#377DEC;font-weight:700;font-size:1rem">$${PRECIO_TRANSFERENCIA}</span>
-              <span style="font-size:0.7rem;color:#6b7280">Pagás ahora con MercadoPago (QR)</span>
+              <span style="color:#6366f1;font-weight:700;font-size:0.95rem">${formatARS(items.reduce((s, it) => s + priceFor(it), 0))}</span>
+              <span style="font-size:0.65rem;color:#6b7280">Crédito/Débito via Stripe</span>
+            </button>
+            <button type="button" class="pago-card" data-metodo="mercadopago"
+              style="background:#fff;border:2px solid #e5e7eb;border-radius:0.875rem;padding:0.85rem;text-align:left;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:0.2rem">
+              <div style="display:flex;align-items:center;gap:0.4rem">
+                <span style="font-size:1.15rem">🏦</span>
+                <b style="color:#1f2937;font-size:0.85rem">MercadoPago</b>
+              </div>
+              <span style="color:#00b1ea;font-weight:700;font-size:0.95rem">${formatARS(items.reduce((s, it) => s + priceFor(it), 0))}</span>
+              <span style="font-size:0.65rem;color:#6b7280">QR / Transferencia / MP</span>
             </button>
             <button type="button" class="pago-card" data-metodo="efectivo"
-              style="background:#fff;border:2px solid #e5e7eb;border-radius:0.875rem;padding:1rem;text-align:left;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:0.25rem">
-              <div style="display:flex;align-items:center;gap:0.5rem">
-                <span style="font-size:1.25rem">💵</span>
-                <b style="color:#1f2937;font-size:0.95rem">Efectivo</b>
+              style="background:#fff;border:2px solid #e5e7eb;border-radius:0.875rem;padding:0.85rem;text-align:left;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:0.2rem">
+              <div style="display:flex;align-items:center;gap:0.4rem">
+                <span style="font-size:1.15rem">💵</span>
+                <b style="color:#1f2937;font-size:0.85rem">Efectivo</b>
               </div>
-              <span style="color:#16a34a;font-weight:700;font-size:1rem">Al recibir</span>
-              <span style="font-size:0.7rem;color:#6b7280">Queda pendiente hasta entregar</span>
+              <span style="color:#16a34a;font-weight:700;font-size:0.95rem">${formatARS(items.reduce((s, it) => s + priceFor(it), 0))}</span>
+              <span style="font-size:0.65rem;color:#6b7280">Pagás al recibir</span>
             </button>
           </div>
         </div>
@@ -283,125 +375,84 @@ const PRECIO_TRANSFERENCIA = 3000;
       </form>
     `;
 
-    // Restaurar estado inicial del mapa si existía
+    // Restore location from profile if available
     if (initialMapLat != null && initialMapLng != null) {
-      state.mapLat = initialMapLat;
-      state.mapLng = initialMapLng;
-      state.mapAddress = initialMapAddr;
+      showCkLocation(initialMapLat, initialMapLng, initialMapAddr);
     }
 
-    initTabs();
+    initLocEvents();
     initPagoCards();
     initSubmit();
-    initGeo();
   }
 
   // ==========================================================
-  //                       TABS / MAPA
+  //                       UBICACIÓN
   // ==========================================================
-  function setTab(tab) {
-    state.dirTab = tab;
-    document.querySelectorAll(".ck-tab").forEach((b) => {
-      const active = b.dataset.ckTab === tab;
-      b.style.background = active ? "#fff" : "transparent";
-      b.style.color = active ? "#377DEC" : "#6b7280";
-      b.style.boxShadow = active ? "0 1px 2px rgba(0,0,0,0.05)" : "none";
-    });
-    document.getElementById("ck-panel-manual").style.display = tab === "manual" ? "" : "none";
-    document.getElementById("ck-panel-mapa").style.display = tab === "mapa" ? "flex" : "none";
-    if (tab === "mapa" && !state.mapReady) initMap();
+  function setCkLocState(s) {
+    state.locMode = s;
+    const el = (id) => document.getElementById(id);
+    el("ck-loc-empty").style.display = s === "empty" ? "flex" : "none";
+    el("ck-loc-loading").style.display = s === "loading" ? "block" : "none";
+    el("ck-loc-result").style.display = s === "result" ? "flex" : "none";
+    el("ck-loc-error").style.display = s === "error" ? "flex" : "none";
   }
 
-  function initTabs() {
-    document.querySelectorAll(".ck-tab").forEach((b) => {
-      b.addEventListener("click", () => setTab(b.dataset.ckTab));
-    });
-  }
-
-  function initMap() {
-    state.mapReady = true;
-    const mapEl = document.getElementById("ck-map");
-    if (!isGmapsConfigured()) {
-      mapEl.innerHTML = `
-        <div style="padding:1rem;text-align:center;font-size:0.85rem;color:#6b7280">
-          ⚠️ Mapa no disponible.<br>Usá la opción <b>Escribir</b>.
-        </div>
-      `;
-      return;
+  async function requestCkLocation() {
+    setCkLocState("loading");
+    try {
+      const { lat, lng } = await geolocate();
+      const address = await reverseGeocode(lat, lng);
+      showCkLocation(lat, lng, address);
+    } catch (err) {
+      const msgEl = document.getElementById("ck-loc-error-msg");
+      if (msgEl) msgEl.textContent = err.message || "Error de ubicación";
+      setCkLocState("error");
     }
-    loadGoogleMaps()
-      .then(() => {
-        mapEl.innerHTML = "";
-        const center = {
-          lat: state.mapLat ?? INITIAL_LAT,
-          lng: state.mapLng ?? INITIAL_LNG,
-        };
-        state.map = new google.maps.Map(mapEl, {
-          center,
-          zoom: 15,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-        });
-        state.marker = new google.maps.Marker({
-          position: center,
-          map: state.map,
-          draggable: true,
-          title: "Tu ubicación",
-        });
-        state.geocoder = new google.maps.Geocoder();
-        state.marker.addListener("dragend", onPinMove);
-        state.map.addListener("click", (e) => {
-          state.marker.setPosition(e.latLng);
-          onPinMove();
-        });
-        onPinMove();
-      })
-      .catch(() => {
-        mapEl.innerHTML = `
-          <div style="padding:1rem;text-align:center;font-size:0.85rem;color:#6b7280">
-            ⚠️ No se pudo cargar el mapa.<br>Usá <b>Escribir</b>.
-          </div>
-        `;
-      });
   }
 
-  async function onPinMove() {
-    const pos = state.marker.getPosition();
-    state.mapLat = pos.lat();
-    state.mapLng = pos.lng();
-    state.mapAddress = await reverseGeocode(state.geocoder, state.mapLat, state.mapLng);
+  async function showCkLocation(lat, lng, address) {
+    state.mapLat = lat;
+    state.mapLng = lng;
+    state.mapAddress = address || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
     document.getElementById("ck-map-addr-text").textContent = state.mapAddress;
-    document.getElementById("ck-map-addr").style.display = "block";
+    document.getElementById("ck-maps-link").href = mapsLink(lat, lng);
+    setCkLocState("result");
+
+    // Render map
+    try {
+      await loadLeaflet();
+      const mapEl = document.getElementById("ck-map");
+      mapEl.innerHTML = "";
+      const { map, marker } = createMap(mapEl, { lat, lng, zoom: 17 });
+      state.map = map;
+      state.marker = marker;
+      marker.on("dragend", onCkPinMove);
+      map.on("click", (e) => { marker.setLatLng(e.latlng); onCkPinMove(); });
+      setTimeout(() => map.invalidateSize(), 100);
+    } catch {
+      document.getElementById("ck-map").innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#6b7280;font-size:0.8rem">Mapa no disponible</div>';
+    }
   }
 
-  function initGeo() {
-    document.getElementById("ck-geo-btn")?.addEventListener("click", async (e) => {
-      const btn = e.currentTarget;
-      btn.disabled = true;
-      const original = btn.innerHTML;
-      btn.innerHTML = "Obteniendo ubicación...";
-      try {
-        const { lat, lng } = await geolocate();
-        if (state.map && state.marker) {
-          const p = new google.maps.LatLng(lat, lng);
-          state.map.setCenter(p);
-          state.map.setZoom(17);
-          state.marker.setPosition(p);
-          await onPinMove();
-        } else {
-          state.mapLat = lat;
-          state.mapLng = lng;
-          state.mapAddress = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-          document.getElementById("ck-map-addr-text").textContent = state.mapAddress;
-          document.getElementById("ck-map-addr").style.display = "block";
-        }
-      } catch (err) {
-        alert(err.message || "No se pudo obtener tu ubicación");
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = original;
-      }
+  async function onCkPinMove() {
+    const { lat, lng } = state.marker.getLatLng();
+    state.mapLat = lat;
+    state.mapLng = lng;
+    state.mapAddress = await reverseGeocode(lat, lng);
+    document.getElementById("ck-map-addr-text").textContent = state.mapAddress;
+    document.getElementById("ck-maps-link").href = mapsLink(lat, lng);
+  }
+
+  function initLocEvents() {
+    document.getElementById("ck-geo-btn")?.addEventListener("click", requestCkLocation);
+    document.getElementById("ck-loc-retry")?.addEventListener("click", requestCkLocation);
+    document.getElementById("ck-loc-change")?.addEventListener("click", () => {
+      state.mapLat = null;
+      state.mapLng = null;
+      state.mapAddress = "";
+      if (state.map) { try { state.map.remove(); } catch {} state.map = null; }
+      setCkLocState("empty");
     });
   }
 
@@ -441,18 +492,22 @@ const PRECIO_TRANSFERENCIA = 3000;
   //                       SUBMIT
   // ==========================================================
   function getDireccion() {
-    if (state.dirTab === "manual") {
-      const texto = document.getElementById("ck-dir-manual").value.trim();
-      if (!texto) return null;
-      return { tipo: "manual", texto, address: texto };
+    // GPS location has priority
+    if (state.locMode === "result" && state.mapLat != null && state.mapLng != null) {
+      return {
+        tipo: "mapa",
+        address: state.mapAddress || `${state.mapLat.toFixed(6)}, ${state.mapLng.toFixed(6)}`,
+        lat: state.mapLat,
+        lng: state.mapLng,
+      };
     }
-    if (state.mapLat == null || state.mapLng == null) return null;
-    return {
-      tipo: "mapa",
-      address: state.mapAddress || `${state.mapLat.toFixed(6)}, ${state.mapLng.toFixed(6)}`,
-      lat: state.mapLat,
-      lng: state.mapLng,
-    };
+    // Manual text input (from empty or error state)
+    const manualEl = state.locMode === "error"
+      ? document.getElementById("ck-dir-manual-fb")
+      : document.getElementById("ck-dir-manual");
+    const texto = manualEl?.value?.trim();
+    if (texto) return { tipo: "manual", texto, address: texto };
+    return null;
   }
 
   function initSubmit() {
@@ -462,11 +517,7 @@ const PRECIO_TRANSFERENCIA = 3000;
 
       const direccion = getDireccion();
       if (!direccion) {
-        showError(
-          state.dirTab === "manual"
-            ? "Ingresá la dirección de entrega."
-            : "Marcá tu ubicación en el mapa o tocá 'Usar mi ubicación'."
-        );
+        showError("Compartí tu ubicación o escribí la dirección de entrega.");
         return;
       }
 
@@ -495,55 +546,66 @@ const PRECIO_TRANSFERENCIA = 3000;
         cantidad: it.cantidad ?? 1,
       }));
 
-      const monto = state.pagoMetodo === "transferencia" ? PRECIO_TRANSFERENCIA : 0;
+      const monto = items.reduce((s, it) => s + priceFor(it), 0);
+      const commission = items.reduce((s, it) => s + commissionFor(it), 0);
+      const deliveryCode = generateDeliveryCode();
 
-      const order = createOrder({
-        nombre,
-        servicios,
-        ubicacion,
-        pago: { metodo: state.pagoMetodo, monto },
-      });
-
-      let pref = null;
-      if (state.pagoMetodo === "transferencia") {
-        try {
-          pref = await createPaymentPreference({
-            orderId: order.id,
-            amount: monto,
-            description: `Mandados Ahora — pedido ${order.id}`,
-          });
-          updateOrder(order.id, {
-            pago: { preferenceId: pref.id, paymentUrl: pref.paymentUrl },
-          });
-        } catch (err) {
-          console.error(err);
-          showError("No se pudo generar el link de pago. Probá de nuevo.");
-          return;
-        }
-      }
-
-      // Guardar nombre + direccion para futuros pedidos
       setProfile({ nombre, direccion });
 
-      if (state.pagoMetodo === "transferencia") {
-        // El WhatsApp se manda recién cuando el cliente toque "Ya pagué"
-        showTransferPayment(order, pref, {
+      let order;
+      try {
+        order = await createOrder({
           nombre,
           servicios,
-          direccion,
+          ubicacion,
           pago: { metodo: state.pagoMetodo, monto },
+          deliveryCode,
+          driverCommission: commission,
         });
+      } catch (err) {
+        console.error("[checkout] Error creando pedido:", err);
+        showError("No se pudo crear el pedido. Probá de nuevo.");
+        return;
+      }
+
+      const orderId = order.id;
+
+      if (state.pagoMetodo === "stripe") {
+        try {
+          showLoading("Conectando con Stripe...");
+          const session = await createStripeSession({
+            orderId,
+            amount: monto,
+            description: `Mandados Ahora — ${servicios.length} servicio${servicios.length > 1 ? "s" : ""}`,
+          });
+          const waUrl = buildWhatsappMessage({ order, nombre, servicios, direccion, pago: { metodo: "stripe", monto }, paymentUrl: null, deliveryCode });
+          window.open(waUrl, "_blank");
+          clear();
+          window.location.href = session.paymentUrl;
+        } catch (err) {
+          console.error(err);
+          showError(err.message || "No se pudo conectar con Stripe. Probá de nuevo.");
+        }
+
+      } else if (state.pagoMetodo === "mercadopago") {
+        try {
+          showLoading("Conectando con MercadoPago...");
+          const pref = await createMPPreference({
+            orderId,
+            amount: monto,
+            description: `Mandados Ahora — ${servicios.length} servicio${servicios.length > 1 ? "s" : ""}`,
+          });
+          updateOrder(orderId, { payment_reference: pref.preferenceId }).catch(() => {});
+          showMPPayment(order, pref, orderId, { nombre, servicios, direccion, pago: { metodo: "mercadopago", monto }, deliveryCode });
+        } catch (err) {
+          console.error(err);
+          showError(err.message || "No se pudo conectar con MercadoPago. Probá de nuevo.");
+        }
+
       } else {
-        const waUrl = buildWhatsappMessage({
-          order,
-          nombre,
-          servicios,
-          direccion,
-          pago: { metodo: state.pagoMetodo, monto },
-          paymentUrl: null,
-        });
+        const waUrl = buildWhatsappMessage({ order, nombre, servicios, direccion, pago: { metodo: "efectivo", monto }, paymentUrl: null, deliveryCode });
         window.open(waUrl, "_blank");
-        showCashSuccess(order);
+        showCashSuccess(order, orderId, deliveryCode, monto);
         clear();
       }
     });
@@ -552,108 +614,86 @@ const PRECIO_TRANSFERENCIA = 3000;
   // ==========================================================
   //                       MENSAJE WA
   // ==========================================================
-  function buildWhatsappMessage({ order, nombre, servicios, direccion, pago, paymentUrl }) {
-    const serviciosTxt = servicios
-      .map((s, i) => {
-        const lines = [`*${i + 1}. ${s.servicio}*`];
-        if (s.negocio) lines.push(`🏬 Sucursal: ${s.negocio}`);
-        if (s.descripcion) lines.push(`📝 Descripción:\n${s.descripcion}`);
-        return lines.join("\n");
-      })
-      .join("\n\n---\n\n");
-
+  function buildWhatsappMessage({ order, nombre, servicios, direccion, pago, paymentUrl, deliveryCode }) {
     const dirTxt = direccion?.address || direccion?.texto || "";
-    const dirCoords =
+    const mapsUrl =
       direccion?.lat != null && direccion?.lng != null
-        ? `\n🗺️ https://www.google.com/maps/search/?api=1&query=${direccion.lat},${direccion.lng}`
+        ? `https://www.google.com/maps/search/?api=1&query=${direccion.lat},${direccion.lng}`
         : "";
 
-    const pagoTxt =
-      pago.metodo === "transferencia"
-        ? `💳 *Pago:* Transferencia (MercadoPago) — $${pago.monto}${
-            paymentUrl ? `\n🔗 ${paymentUrl}` : ""
-          }`
-        : `💳 *Pago:* Efectivo (al recibir)`;
+    const lines = [`*NUEVO PEDIDO*`, ``];
+    if (nombre) lines.push(`Nombre: ${nombre}`);
+    if (dirTxt) lines.push(`Direccion: ${dirTxt}`);
+    if (mapsUrl) lines.push(`Maps: ${mapsUrl}`);
+    lines.push(``);
 
-    const header = [
-      `🛒 *Nuevo pedido — Mandados Ahora*`,
-      `Total de servicios: ${servicios.length}`,
-    ];
-    if (nombre) header.push(`👤 *Nombre:* ${nombre}`);
-    if (dirTxt) header.push(`📍 *Dirección:* ${dirTxt}${dirCoords}`);
+    lines.push(`— Detalle (${servicios.length}) —`);
+    servicios.forEach((s, i) => {
+      lines.push(``);
+      lines.push(`*${i + 1}. ${s.servicio}*`);
+      if (s.negocio) lines.push(`Local: ${s.negocio}`);
+      if (s.descripcion) lines.push(`${s.descripcion}`);
+    });
+    lines.push(``);
 
-    const msg = `${header.join("\n")}\n\n${serviciosTxt}\n\n${pagoTxt}\n🆔 ${order.id}`;
+    const metodoLabel = {
+      stripe: `Tarjeta (Stripe)`,
+      mercadopago: `MercadoPago`,
+      efectivo: `Efectivo al recibir`,
+    };
+    const total = pago.monto || items.reduce((s, it) => s + priceFor(it), 0);
+    lines.push(`*Total: ${formatARS(total)}* (${servicios.length} servicio${servicios.length > 1 ? "s" : ""})`);
+    lines.push(`Pago: ${metodoLabel[pago.metodo] || pago.metodo}`);
+    if (paymentUrl) lines.push(`Link: ${paymentUrl}`);
+    if (deliveryCode) lines.push(``, `*Codigo de entrega: ${deliveryCode}* — Darselo al repartidor al recibir.`);
+    lines.push(`Pedido: ${order.id}`);
+
+    const msg = lines.join("\n");
     return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`;
   }
 
   // ==========================================================
   //                       SUCCESS
   // ==========================================================
-  function showTransferPayment(order, pref, sendData) {
+  function showLoading(msg) {
+    root.innerHTML = `
+      <div style="background:#fff;border-radius:1rem;padding:3rem 1.5rem;width:100%;text-align:center;box-shadow:0 10px 25px -5px rgba(0,0,0,0.08);border:1px solid #e5e7eb">
+        <div style="width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#377DEC;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 1rem"></div>
+        <p style="color:#6b7280;font-size:0.95rem;margin:0">${msg || "Procesando..."}</p>
+      </div>
+      <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+    `;
+  }
+
+  function showMPPayment(order, pref, supabaseOrderId, sendData, deliveryCode) {
     root.innerHTML = `
       <div style="background:#fff;border-radius:1rem;padding:1.75rem 1.5rem;width:100%;box-shadow:0 10px 25px -5px rgba(0,0,0,0.08);border:1px solid #e5e7eb;display:flex;flex-direction:column;gap:1rem">
 
         <div style="text-align:center">
-          <h2 style="font-size:1.35rem;font-weight:800;color:#1f2937;margin:0 0 0.25rem">Pagá tu pedido</h2>
+          <h2 style="font-size:1.35rem;font-weight:800;color:#1f2937;margin:0 0 0.25rem">Pagá con MercadoPago</h2>
           <p style="color:#6b7280;font-size:0.875rem;margin:0">
-            Transferí <b style="color:#1f2937">$${PRECIO_TRANSFERENCIA}</b> y después enviá el pedido por WhatsApp.
+            Monto: <b style="color:#1f2937">$${PRECIO_TRANSFERENCIA}</b>
           </p>
         </div>
 
-        <div style="display:inline-flex;background:#f3f4f6;border-radius:0.6rem;padding:0.25rem;align-self:center">
-          <button type="button" data-pay-tab="alias" class="ck-pay-tab"
-            style="padding:0.45rem 0.9rem;border-radius:0.5rem;font-size:0.85rem;font-weight:500;background:#fff;color:#377DEC;box-shadow:0 1px 2px rgba(0,0,0,0.05);border:none;cursor:pointer">
-            💳 Alias
-          </button>
-          <button type="button" data-pay-tab="qr" class="ck-pay-tab"
-            style="padding:0.45rem 0.9rem;border-radius:0.5rem;font-size:0.85rem;font-weight:500;background:transparent;color:#6b7280;border:none;cursor:pointer">
-            📱 QR
-          </button>
-        </div>
-
-        <div id="ck-pay-alias" style="display:flex;flex-direction:column;gap:0.6rem;align-items:center">
-          <div style="background:#EBF3FF;border:1px solid rgba(55,125,236,0.25);border-radius:0.75rem;padding:1rem 1.25rem;display:flex;flex-direction:column;align-items:center;gap:0.25rem;width:100%">
-            <span style="font-size:0.7rem;font-weight:700;color:#377DEC;text-transform:uppercase;letter-spacing:0.08em">Alias MercadoPago</span>
-            <span style="font-size:1.35rem;font-weight:800;color:#1f2937;letter-spacing:0.02em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${ALIAS_MP}</span>
-          </div>
-          <button type="button" id="ck-copy-alias"
-            style="background:#377DEC;color:#fff;border:none;padding:0.6rem 1.25rem;border-radius:0.55rem;font-size:0.85rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:0.4rem">
-            📋 Copiar alias
-          </button>
-          <p style="font-size:0.75rem;color:#6b7280;text-align:center;margin:0">
-            Transferí desde tu app bancaria o MercadoPago.
-          </p>
-        </div>
-
-        <div id="ck-pay-qr" style="display:none;flex-direction:column;gap:0.5rem;align-items:center">
+        <div style="display:flex;flex-direction:column;gap:0.75rem;align-items:center">
           ${
             pref?.qrImage
-              ? `<img src="${pref.qrImage}" alt="QR de pago" style="width:200px;height:200px;border-radius:0.5rem;border:1px solid #e5e7eb;background:#fff" />`
-              : `<div style="padding:1rem;color:#6b7280;font-size:0.85rem">QR no disponible</div>`
+              ? `<img src="${pref.qrImage}" alt="QR de pago" style="width:200px;height:200px;border-radius:0.75rem;border:1px solid #e5e7eb;background:#fff" />`
+              : ""
           }
           ${
             pref?.paymentUrl
               ? `<a href="${pref.paymentUrl}" target="_blank" rel="noopener"
-                    style="font-size:0.8rem;color:#00B1EA;text-decoration:underline">
-                    Abrir checkout MercadoPago
+                    style="display:inline-block;background:#00b1ea;color:#fff;padding:0.7rem 1.5rem;border-radius:0.6rem;font-weight:600;text-decoration:none;font-size:0.9rem">
+                    Abrir MercadoPago
                   </a>`
               : ""
           }
           <p style="font-size:0.75rem;color:#6b7280;text-align:center;margin:0">
-            Escaneá con la app de MercadoPago.
+            Escaneá el QR con la app de MercadoPago o tocá el botón.
           </p>
-          ${
-            pref?.demo
-              ? `<p style="font-size:0.7rem;color:#b45309;background:#fef3c7;padding:0.4rem 0.6rem;border-radius:0.4rem;margin:0;text-align:center;width:100%">
-                  ⚙️ Modo demo: para pagar de verdad usá el alias.
-                </p>`
-              : ""
-          }
         </div>
-
-        <p style="font-size:0.7rem;color:#9ca3af;text-align:center;margin:0">
-          ID de pedido: <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">${order.id}</code>
-        </p>
 
         <button type="button" id="ck-send-wa"
           style="width:100%;background:#22c55e;color:#fff;border:none;padding:0.85rem;border-radius:0.75rem;font-size:0.95rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem">
@@ -662,48 +702,21 @@ const PRECIO_TRANSFERENCIA = 3000;
             <path d="M3 21l1.65 -3.8a9 9 0 1 1 3.4 2.9l-5.05 .9"/>
             <path d="M9 10a.5 .5 0 0 0 1 0v-1a.5 .5 0 0 0 -1 0v1a5 5 0 0 0 5 5h1a.5 .5 0 0 0 0 -1h-1a.5 .5 0 0 0 0 1"/>
           </svg>
-          Ya pagué — enviar pedido por WhatsApp
+          Ya pagué — enviar por WhatsApp
         </button>
 
-        <a href="/" style="text-align:center;color:#6b7280;font-size:0.8rem;text-decoration:underline">
+        ${supabaseOrderId
+          ? `<a href="/pedido?id=${supabaseOrderId}" style="text-align:center;color:#377DEC;font-size:0.8rem;text-decoration:underline">
+               📍 Seguir mi pedido
+             </a>`
+          : ""
+        }
+
+        <a href="/" style="text-align:center;color:#6b7280;font-size:0.75rem;text-decoration:underline">
           Volver al inicio
         </a>
       </div>
     `;
-
-    document.querySelectorAll(".ck-pay-tab").forEach((b) => {
-      b.addEventListener("click", () => {
-        const tab = b.dataset.payTab;
-        document.getElementById("ck-pay-alias").style.display = tab === "alias" ? "flex" : "none";
-        document.getElementById("ck-pay-qr").style.display = tab === "qr" ? "flex" : "none";
-        document.querySelectorAll(".ck-pay-tab").forEach((bb) => {
-          const active = bb.dataset.payTab === tab;
-          bb.style.background = active ? "#fff" : "transparent";
-          bb.style.color = active ? "#377DEC" : "#6b7280";
-          bb.style.boxShadow = active ? "0 1px 2px rgba(0,0,0,0.05)" : "none";
-        });
-      });
-    });
-
-    document.getElementById("ck-copy-alias").addEventListener("click", async (e) => {
-      const btn = e.currentTarget;
-      const original = btn.innerHTML;
-      const flash = () => {
-        btn.innerHTML = "✓ Copiado";
-        setTimeout(() => { btn.innerHTML = original; }, 1500);
-      };
-      try {
-        await navigator.clipboard.writeText(ALIAS_MP);
-        flash();
-      } catch {
-        const tmp = document.createElement("input");
-        tmp.value = ALIAS_MP;
-        document.body.appendChild(tmp);
-        tmp.select();
-        try { document.execCommand("copy"); flash(); } catch {}
-        document.body.removeChild(tmp);
-      }
-    });
 
     document.getElementById("ck-send-wa").addEventListener("click", () => {
       const waUrl = buildWhatsappMessage({
@@ -713,51 +726,47 @@ const PRECIO_TRANSFERENCIA = 3000;
         direccion: sendData.direccion,
         pago: sendData.pago,
         paymentUrl: pref?.paymentUrl || null,
+        deliveryCode: sendData.deliveryCode,
       });
       window.open(waUrl, "_blank");
       clear();
-      showTransferDone(order);
+      // Redirigir al seguimiento
+      if (supabaseOrderId) {
+        window.location.href = `/pago-exitoso?provider=mercadopago&order_id=${supabaseOrderId}`;
+      }
     });
   }
 
-  function showTransferDone(order) {
+  function showCashSuccess(order, supabaseOrderId, deliveryCode, totalAmount) {
+    const trackLink = supabaseOrderId
+      ? `<a href="/pedido?id=${supabaseOrderId}" style="display:inline-block;background:#377DEC;color:#fff;padding:0.625rem 1.5rem;border-radius:0.5rem;font-weight:600;text-decoration:none;margin-bottom:0.5rem">
+           Seguir mi pedido en vivo
+         </a><br>`
+      : "";
+    const codeBlock = deliveryCode
+      ? `<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:0.75rem;padding:0.75rem 1rem;margin:0.75rem 0;display:inline-block">
+           <p style="font-size:0.7rem;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.08em;margin:0 0 0.25rem">Codigo de entrega</p>
+           <p style="font-size:2rem;font-weight:800;color:#1f2937;letter-spacing:0.15em;font-family:monospace;margin:0">${deliveryCode}</p>
+           <p style="font-size:0.7rem;color:#92400e;margin:0.25rem 0 0">Dáselo al repartidor cuando llegue</p>
+         </div>`
+      : "";
     root.innerHTML = `
       <div style="background:#fff;border-radius:1rem;padding:2rem 1.5rem;width:100%;text-align:center;box-shadow:0 10px 25px -5px rgba(0,0,0,0.08);border:1px solid #e5e7eb">
-        <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 0.75rem;display:block">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 0.75rem;display:block">
           <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
           <path d="M5 12l5 5l10 -10"/>
         </svg>
-        <h2 style="font-size:1.35rem;font-weight:700;color:#1f2937;margin-bottom:0.25rem">¡Pedido enviado!</h2>
-        <p style="color:#6b7280;font-size:0.875rem;margin-bottom:1rem">
-          Te abrimos WhatsApp con tu pedido. Si no se abrió, revisá los popups del navegador.
+        <h2 style="font-size:1.25rem;font-weight:700;color:#1f2937;margin-bottom:0.25rem">Pedido recibido</h2>
+        <p style="color:#6b7280;font-size:0.85rem;margin-bottom:0.5rem">
+          Total: <b style="color:#1f2937">${formatARS(totalAmount)}</b> — Pagás en efectivo al recibir.
         </p>
-        <p style="font-size:0.7rem;color:#9ca3af;margin-bottom:1rem">
-          ID de pedido: <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">${order.id}</code>
-        </p>
-        <a href="/" style="display:inline-block;background:#377DEC;color:#fff;padding:0.625rem 1.5rem;border-radius:0.5rem;font-weight:500;text-decoration:none">
-          Volver al inicio
-        </a>
-      </div>
-    `;
-  }
-
-  function showCashSuccess(order) {
-    root.innerHTML = `
-      <div style="background:#fff;border-radius:1rem;padding:2rem 1.5rem;width:100%;text-align:center;box-shadow:0 10px 25px -5px rgba(0,0,0,0.08);border:1px solid #e5e7eb">
-        <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto 0.75rem;display:block">
-          <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-          <path d="M5 12l5 5l10 -10"/>
-        </svg>
-        <h2 style="font-size:1.35rem;font-weight:700;color:#1f2937;margin-bottom:0.25rem">¡Pedido recibido!</h2>
-        <p style="color:#6b7280;font-size:0.875rem;margin-bottom:1rem">
-          Pagás en efectivo al recibir el pedido. Queda marcado como <b>pendiente</b>.
-        </p>
-        <p style="font-size:0.7rem;color:#9ca3af;margin-bottom:1rem">
-          ID de pedido: <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px">${order.id}</code>
-        </p>
-        <a href="/" style="display:inline-block;background:#377DEC;color:#fff;padding:0.625rem 1.5rem;border-radius:0.5rem;font-weight:500;text-decoration:none">
-          Volver al inicio
-        </a>
+        ${codeBlock}
+        <div style="margin-top:0.75rem">
+          ${trackLink}
+          <a href="/" style="display:inline-block;color:#6b7280;padding:0.5rem 1.5rem;font-size:0.85rem;text-decoration:none">
+            Volver al inicio
+          </a>
+        </div>
       </div>
     `;
   }

@@ -85,45 +85,47 @@ export function subscribeUpdates(handler) {
 export function formatItem(item, index) {
   const lines = [];
   lines.push(`*${index}. ${item.servicio}*`);
-  // Compat: aceptar tanto los nombres nuevos (negocio/descripcion) como los viejos (contacto/detalles)
   const negocio = item.negocio || item.contacto || "";
   const descripcion = item.descripcion || item.detalles || "";
   const cantidad = item.cantidad ?? 1;
-  if (negocio) lines.push(`🏬 Negocio: ${negocio}`);
-  if (descripcion) lines.push(`📝 Descripción:\n${descripcion}`);
-  if (cantidad && cantidad !== 1) lines.push(`🔢 Cantidad: ${cantidad}`);
-  if (item.nombre) lines.push(`👤 Nombre: ${item.nombre}`);
+  if (negocio) lines.push(`Local: ${negocio}`);
+  if (descripcion) lines.push(`${descripcion}`);
+  if (cantidad && cantidad !== 1) lines.push(`Cantidad: ${cantidad}`);
+  if (item.nombre) lines.push(`Nombre: ${item.nombre}`);
   if (item.direccion) {
     if (typeof item.direccion === "string") {
-      lines.push(`📍 Dirección: ${item.direccion}`);
+      lines.push(`Direccion: ${item.direccion}`);
     } else {
       const dirTxt = item.direccion.address || item.direccion.texto || "";
-      if (dirTxt) lines.push(`📍 Dirección: ${dirTxt}`);
+      if (dirTxt) lines.push(`Direccion: ${dirTxt}`);
       if (item.direccion.lat != null && item.direccion.lng != null) {
-        lines.push(`🗺️ https://www.google.com/maps/search/?api=1&query=${item.direccion.lat},${item.direccion.lng}`);
+        lines.push(`Maps: https://www.google.com/maps/search/?api=1&query=${item.direccion.lat},${item.direccion.lng}`);
       }
     }
   }
   if (Array.isArray(item.extras) && item.extras.length) {
     item.extras.forEach((ex, i) => {
-      lines.push(`------------------------------`);
+      lines.push(`---`);
       const exN = ex.negocio || ex.contacto || "";
       const exD = ex.descripcion || ex.detalles || "";
-      if (exN) lines.push(`🏬 Negocio ${i + 2}: ${exN}`);
-      if (exD) lines.push(`📝 Descripción:\n${exD}`);
+      if (exN) lines.push(`Local ${i + 2}: ${exN}`);
+      if (exD) lines.push(`${exD}`);
     });
   }
-  if (item.pago) lines.push(`💳 Método de pago: ${item.pago}`);
-  if (item.costo) lines.push(`💲 Precio del Servicio: ${item.costo}`);
+  if (item.pago) lines.push(`Pago: ${item.pago}`);
+  if (item.costo) lines.push(`Precio: ${item.costo}`);
   return lines.join("\n");
 }
 
 export function buildWhatsappUrl() {
   const items = read();
   if (!items.length) return null;
-  const header = `🛒 *Nuevo pedido — Mandados Ahora*\nTotal de servicios: ${items.length}\n`;
-  const body = items.map((it, i) => formatItem(it, i + 1)).join("\n\n");
-  const msg = `${header}\n${body}`;
+  const lines = [`*NUEVO PEDIDO*`, `Servicios: ${items.length}`, ``];
+  items.forEach((it, i) => {
+    lines.push(formatItem(it, i + 1));
+    if (i < items.length - 1) lines.push(``);
+  });
+  const msg = lines.join("\n");
   return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`;
 }
 

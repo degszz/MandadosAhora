@@ -1,0 +1,109 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import "../../styles/global.css";
+---
+
+<Layout title="Pendiente de verificación · Mandados Ahora">
+  <div class="w-full flex justify-center my-10 px-4">
+    <div class="w-full max-w-md">
+      <div class="bg-white rounded-2xl shadow-xl p-8 border border-gray-100 text-center">
+        <div class="flex justify-center mb-4">
+          <div class="w-16 h-16 rounded-full flex items-center justify-center" style="background:#fef3c7">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9"/>
+              <polyline points="12 7 12 12 15 14"/>
+            </svg>
+          </div>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-800 mb-2">Cuenta pendiente</h1>
+        <p class="text-sm text-gray-600 mb-1">
+          Tu cuenta está esperando verificación del administrador.
+        </p>
+        <p id="welcome" class="text-sm text-gray-500 mb-5"></p>
+
+        <div class="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 text-left mb-5">
+          🔄 Esta pantalla se actualiza automáticamente cuando te aprueben. No hace falta refrescar.
+        </div>
+
+        <button
+          id="logout-btn"
+          type="button"
+          class="w-full border border-gray-200 hover:border-red-300 hover:text-red-600 hover:bg-red-50 text-gray-600 rounded-xl py-2.5 text-sm font-medium transition-colors"
+        >
+          Cerrar sesión
+        </button>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { getSupabase, getMyProfile, signOut } from "../../scripts/supabase.js";
+
+  const welcome = document.getElementById("welcome");
+  const logoutBtn = document.getElementById("logout-btn");
+
+  async function bootstrap() {
+    const sb = getSupabase();
+    if (!sb) {
+      window.location.replace("/repartidor");
+      return;
+    }
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      window.location.replace("/repartidor");
+      return;
+    }
+    const profile = await getMyProfile();
+    if (!profile) {
+      window.location.replace("/repartidor");
+      return;
+    }
+    if (profile.role === "admin") {
+      window.location.replace("/admin");
+      return;
+    }
+    if (profile.verified) {
+      window.location.replace("/repartidor/panel");
+      return;
+    }
+    welcome.textContent = `Hola ${profile.full_name || profile.email}, te avisamos cuando te activen.`;
+
+    // Realtime: escuchar cambios en mi propia fila de mandados.profiles
+    const channel = sb
+      .channel("my-profile")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "mandados",
+          table: "profiles",
+          filter: `id=eq.${profile.id}`,
+        },
+        (payload) => {
+          if (payload.new?.verified) {
+            window.location.replace("/repartidor/panel");
+          }
+        }
+      )
+      .subscribe();
+
+    // Fallback por si el realtime falla (ej. schema no expuesto): polling cada 15s
+    const pollId = setInterval(async () => {
+      const p = await getMyProfile();
+      if (p?.verified) {
+        clearInterval(pollId);
+        window.location.replace("/repartidor/panel");
+      }
+    }, 15000);
+
+    logoutBtn.addEventListener("click", async () => {
+      try { channel.unsubscribe(); } catch {}
+      clearInterval(pollId);
+      await signOut();
+      window.location.replace("/repartidor");
+    });
+  }
+
+  bootstrap();
+</script>
