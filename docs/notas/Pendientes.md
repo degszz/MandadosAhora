@@ -8,6 +8,9 @@ Volver: [[00 Inicio]]
 - [ ] Cargar locales de comida, con permiso de cada uno.
 
 ## Técnico
+- [ ] Probar con un repartidor real que al subir el ticket se guarde bien la comisión (trigger 016) y que NO pueda marcarla como paga.
+- [ ] `create-payment` toma el monto y las URLs de vuelta del navegador. El webhook ya rechaza pagos que no alcanzan `total_amount`, pero `total_amount` también lo escribe el cliente. Mejorar: calcular el total del lado del servidor y armar las URLs con `SITE_URL`.
+- [ ] Bucket `comprobantes`: cualquiera puede subir (limitado a imágenes/PDF de 8 MB). Mejorar con URLs firmadas emitidas por una función.
 - [ ] El modal de servicios bloquea solo por offline; el horario propio de cada servicio lo aplica `/servicios/[slug]`.
 - [ ] `supabase/functions/create-payment` del repo no coincide con lo desplegado (lo desplegado usa `fetch` directo y devuelve `qrImage`). Antes de redeployarla, bajar la versión desplegada.
 - [ ] Borrar el archivo de prueba `comprobantes/prueba-borrar.png` del bucket `comprobantes` (desde el dashboard; SQL no deja).
@@ -25,6 +28,7 @@ Volver: [[00 Inicio]]
 - [x] 2026-11-24 Migración 013: anon ya no lista ni modifica pedidos/mensajes. Seguimiento por funciones `get_order`, `get_order_messages`, `set_payment_proof`.
 - [x] 2026-11-24 Migración 014: buckets `tickets` (sube usuario logueado) y `comprobantes` (sube cualquiera), públicos para leer.
 - [x] 2026-11-24 `payment-webhook` v5 (solo MP, clave de servicio, distingue comisión `-fee`, verifica monto cobrado) y `create-platform-fee-payment` v2 (monto desde la base) desplegadas.
+- [x] 2026-11-24 Migración 016: trigger `proteger_campos_pago` (solo admin/webhook tocan campos de pago; comisión = 15% de `purchase_amount` calculada en la base) y `set_payment_proof` restringida.
 - [x] 2026-11-24 Migración 015: GRANTs a `service_role` sobre `mandados`. El webhook nunca había podido marcar un pago.
 - [x] 2026-11-24 Stripe fuera del checkout. Panel legacy y contraseña del admin eliminados.
 - [x] 2026-11-21 Pedido rápido. Migración 012: faltaba `customer_phone` y no se guardaba ningún pedido.

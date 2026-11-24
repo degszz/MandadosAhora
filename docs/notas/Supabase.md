@@ -52,4 +52,4 @@ Todas con `verify_jwt = false`. Secret cargado: `MP_ACCESS_TOKEN` (producción).
 | `whatsapp-send` | Mensajes por Meta Cloud API | **No desplegada** a propósito |
 
 ## Migraciones
-`supabase/migrations/001`–`015`. **No aplicar 003** (borra `schedules`) **ni la parte de settings de 008** (abre la escritura). La base real no sigue los archivos uno a uno: revisar con `list_tables` antes de aplicar.
+`supabase/migrations/001`–`016`. 016 agrega el trigger `proteger_campos_pago` en `orders`: repartidores no pueden tocar `payment_status`, `paid_at`, `payment_reference`, `total_amount`, `paid_to_repartidor` ni marcar `platform_fee_paid`; `platform_fee` se recalcula siempre como 15% de `purchase_amount`. Es `security invoker` a propósito (con definer, `current_user` sería siempre `postgres`). **No aplicar 003** (borra `schedules`) **ni la parte de settings de 008** (abre la escritura). La base real no sigue los archivos uno a uno: revisar con `list_tables` antes de aplicar.
