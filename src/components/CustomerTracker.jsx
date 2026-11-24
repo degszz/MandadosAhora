@@ -20,6 +20,7 @@ export default function CustomerTracker() {
   const scrollRef = useRef(null);
   const sb = useMemo(() => getSupabase(), []);
   const prevMsgCount = useRef(0);
+  const refreshRef = useRef(null);
 
   // Extract order ID from URL
   useEffect(() => {
@@ -82,76 +83,62 @@ export default function CustomerTracker() {
     if (!sb || !orderId) return;
     let cancelled = false;
 
-    (async () => {
-      setLoading(true);
-      const [{ data: ord, error: e1 }, { data: msgs, error: e2 }] = await Promise.all([
-        sb.from("orders").select("*").eq("id", orderId).maybeSingle(),
-        sb.from("messages").select("*").eq("order_id", orderId).order("created_at", { ascending: true }),
+    // El cliente no tiene lectura abierta de tablas (migración 013): consulta
+    // por ID exacto con funciones y refresca cada pocos segundos.
+    const labels = {
+      confirmado: "Tu pedido fue confirmado",
+      en_camino: "Tu pedido va en camino",
+      entregado: "Tu pedido fue entregado",
+      cancelado: "Tu pedido fue cancelado",
+    };
+    let lastStatus = null;
+    let lastMsgCount = null;
+
+    const load = async (first) => {
+      if (first) setLoading(true);
+      const [{ data: ordRows, error: e1 }, { data: msgs }] = await Promise.all([
+        sb.rpc("get_order", { p_id: orderId }),
+        sb.rpc("get_order_messages", { p_id: orderId }),
       ]);
       if (cancelled) return;
+      const ord = ordRows && ordRows[0];
       if (e1 || !ord) {
-        setError(e1?.message || "No se encontró el pedido.");
-        setLoading(false);
+        if (first) {
+          setError(e1?.message || "No se encontró el pedido.");
+          setLoading(false);
+        }
         return;
       }
       setOrder(ord);
-      setMessages(msgs || []);
-      prevMsgCount.current = (msgs || []).length;
+      const list = msgs || [];
+      setMessages((prev) => (prev.length === list.length && prev[prev.length - 1]?.id === list[list.length - 1]?.id ? prev : list));
+      if (lastStatus !== null && ord.status !== lastStatus && labels[ord.status]) {
+        showNotification("Mandados Ahora", labels[ord.status]);
+      }
+      if (lastMsgCount !== null && list.length > lastMsgCount) {
+        const msg = list[list.length - 1];
+        if (msg && msg.sender_role !== "cliente") {
+          const who = msg.sender_role === "admin" ? "Admin" : "Repartidor";
+          showNotification(`${msg.sender_name || who} te escribió`, msg.content?.slice(0, 80) || "Nuevo mensaje");
+        }
+      }
+      lastStatus = ord.status;
+      lastMsgCount = list.length;
+      prevMsgCount.current = list.length;
       if (!customerName && ord.customer_name) setCustomerName(ord.customer_name);
-      setLoading(false);
-    })();
+      if (first) setLoading(false);
+    };
 
-    // Realtime: order changes
-    const orderCh = sb
-      .channel(`order-track-${orderId}`)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "mandados", table: "orders", filter: `id=eq.${orderId}` },
-        (payload) => {
-          setOrder(payload.new);
-          const newStatus = payload.new.status;
-          const oldStatus = payload.old?.status;
-          if (newStatus !== oldStatus) {
-            const labels = {
-              confirmado: "Tu pedido fue confirmado",
-              en_camino: "Tu pedido va en camino",
-              entregado: "Tu pedido fue entregado",
-              cancelado: "Tu pedido fue cancelado",
-            };
-            if (labels[newStatus]) {
-              showNotification("Mandados Ahora", labels[newStatus]);
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    // Realtime: new messages
-    const msgCh = sb
-      .channel(`chat-track-${orderId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "mandados", table: "messages", filter: `order_id=eq.${orderId}` },
-        (payload) => {
-          const msg = payload.new;
-          setMessages((prev) => {
-            if (prev.find((m) => m.id === msg.id)) return prev;
-            return [...prev, msg];
-          });
-          // Notify if message is from repartidor or admin (not from self/cliente)
-          if (msg.sender_role !== "cliente") {
-            const who = msg.sender_role === "admin" ? "Admin" : "Repartidor";
-            const senderLabel = msg.sender_name || who;
-            showNotification(`${senderLabel} te escribió`, msg.content?.slice(0, 80) || "Nuevo mensaje");
-          }
-        }
-      )
-      .subscribe();
+    load(true);
+    const timer = setInterval(() => {
+      if (!document.hidden) load(false);
+    }, 6000);
+    refreshRef.current = () => load(false);
 
     return () => {
       cancelled = true;
-      try { orderCh.unsubscribe(); } catch {}
-      try { msgCh.unsubscribe(); } catch {}
+      clearInterval(timer);
+      refreshRef.current = null;
     };
   }, [sb, orderId, showNotification]);
 
@@ -178,6 +165,7 @@ export default function CustomerTracker() {
       });
       if (error) throw error;
       setInput("");
+      refreshRef.current?.();
     } catch (e) {
       setError(e.message);
     } finally {

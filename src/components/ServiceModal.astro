@@ -1,5 +1,5 @@
 ---
-import { GOOGLE_MAPS_API_KEY, INITIAL_LAT, INITIAL_LNG } from "../scripts/gmaps.js";
+import { INITIAL_LAT, INITIAL_LNG } from "../scripts/gmaps.js";
 ---
 
 <!-- Overlay -->
@@ -139,9 +139,12 @@ import { GOOGLE_MAPS_API_KEY, INITIAL_LAT, INITIAL_LNG } from "../scripts/gmaps.
           </div>
           <div
             id="svc-map-addr"
-            class="hidden bg-[#EBF3FF] text-[#1e40af] px-3 py-2 rounded-lg text-xs"
+            class="hidden bg-[#EBF3FF] text-[#1e40af] px-3 py-2 rounded-lg text-xs flex flex-col gap-1"
           >
-            <b>Dirección:</b> <span id="svc-map-addr-text">—</span>
+            <div><b>Dirección:</b> <span id="svc-map-addr-text">—</span></div>
+            <a id="svc-maps-link" href="#" target="_blank" rel="noopener" class="text-[#377DEC] font-medium underline text-[11px] self-start">
+              Ver en Google Maps →
+            </a>
           </div>
         </div>
       </div>
@@ -204,12 +207,14 @@ import { GOOGLE_MAPS_API_KEY, INITIAL_LAT, INITIAL_LNG } from "../scripts/gmaps.
 <script>
   import { SERVICIOS } from "../data/servicios.js";
   import { addItem } from "../scripts/cart.js";
+  import { isOfflineNow } from "../scripts/business.js";
   import { getProfile, setProfile } from "../scripts/profile.js";
   import {
-    loadGoogleMaps,
+    loadLeaflet,
+    createMap,
     reverseGeocode,
     geolocate,
-    isGmapsConfigured,
+    mapsLink,
   } from "../scripts/gmaps.js";
 
   const overlay = document.getElementById("svc-overlay");
@@ -229,6 +234,7 @@ import { GOOGLE_MAPS_API_KEY, INITIAL_LAT, INITIAL_LNG } from "../scripts/gmaps.
   const mapEl = document.getElementById("svc-map");
   const mapAddrBox = document.getElementById("svc-map-addr");
   const mapAddrText = document.getElementById("svc-map-addr-text");
+  const mapsLinkEl = document.getElementById("svc-maps-link");
   const addBtn = document.getElementById("svc-add-btn");
   const addText = document.getElementById("svc-add-text");
   const errorEl = document.getElementById("svc-error");
@@ -249,7 +255,6 @@ import { GOOGLE_MAPS_API_KEY, INITIAL_LAT, INITIAL_LNG } from "../scripts/gmaps.
     tab: "manual",
     map: null,
     marker: null,
-    geocoder: null,
     mapLat: null,
     mapLng: null,
     mapAddress: "",
@@ -261,6 +266,11 @@ import { GOOGLE_MAPS_API_KEY, INITIAL_LAT, INITIAL_LNG } from "../scripts/gmaps.
   function openModal(slug) {
     const svc = SVC_BY_SLUG[slug];
     if (!svc) return;
+    // Fuera de horario: la página del servicio muestra el aviso y ofrece 24hs
+    if (slug !== "24horas" && isOfflineNow()) {
+      window.location.href = `/servicios/${slug}/`;
+      return;
+    }
     state.servicio = svc;
 
     // Header dinámico
@@ -365,76 +375,61 @@ import { GOOGLE_MAPS_API_KEY, INITIAL_LAT, INITIAL_LNG } from "../scripts/gmaps.
     b.addEventListener("click", () => setTab(b.dataset.tab));
   });
 
-  // ---------- Mapa (lazy) ----------
-  function initMap() {
+  // ---------- Mapa (Leaflet, lazy load) ----------
+  async function initMap() {
     state.mapReady = true;
 
-    if (!isGmapsConfigured()) {
+    try {
+      await loadLeaflet();
+      mapEl.innerHTML = "";
+      const center = { lat: INITIAL_LAT, lng: INITIAL_LNG };
+
+      const { map, marker } = createMap(mapEl, { lat: center.lat, lng: center.lng, zoom: 15 });
+      state.map = map;
+      state.marker = marker;
+
+      marker.on("dragend", async () => {
+        const pos = marker.getLatLng();
+        state.mapLat = pos.lat;
+        state.mapLng = pos.lng;
+        state.mapAddress = await reverseGeocode(state.mapLat, state.mapLng);
+        mapAddrText.textContent = state.mapAddress;
+        if (mapsLinkEl) mapsLinkEl.href = mapsLink(state.mapLat, state.mapLng);
+        mapAddrBox.classList.remove("hidden");
+      });
+
+      map.on("click", async (e) => {
+        marker.setLatLng(e.latlng);
+        state.mapLat = e.latlng.lat;
+        state.mapLng = e.latlng.lng;
+        state.mapAddress = await reverseGeocode(state.mapLat, state.mapLng);
+        mapAddrText.textContent = state.mapAddress;
+        if (mapsLinkEl) mapsLinkEl.href = mapsLink(state.mapLat, state.mapLng);
+        mapAddrBox.classList.remove("hidden");
+      });
+
+      // Restaurar ubicación previa si existe
+      const p = getProfile();
+      if (p.direccion?.tipo === "mapa" && p.direccion.lat != null) {
+        const pos = { lat: p.direccion.lat, lng: p.direccion.lng };
+        map.setView([pos.lat, pos.lng], 17);
+        marker.setLatLng([pos.lat, pos.lng]);
+        state.mapLat = pos.lat;
+        state.mapLng = pos.lng;
+        state.mapAddress = p.direccion.address || await reverseGeocode(pos.lat, pos.lng);
+        mapAddrText.textContent = state.mapAddress;
+        if (mapsLinkEl) mapsLinkEl.href = mapsLink(pos.lat, pos.lng);
+        mapAddrBox.classList.remove("hidden");
+      }
+
+      setTimeout(() => map.invalidateSize(), 100);
+    } catch {
       mapEl.innerHTML = `
-        <div class="p-4 text-center text-sm text-gray-500">
-          ⚠️ Mapa no disponible.<br>Usá la opción <b>Escribir</b>.
+        <div class="flex items-center justify-center h-full text-sm text-gray-500 text-center px-4">
+          ⚠️ No se pudo cargar el mapa.<br>Usá la opción <b>Escribir</b>.
         </div>
       `;
-      return;
     }
-
-    loadGoogleMaps()
-      .then(() => {
-        mapEl.innerHTML = "";
-        const center = { lat: INITIAL_LAT, lng: INITIAL_LNG };
-        state.map = new google.maps.Map(mapEl, {
-          center,
-          zoom: 15,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-        });
-        state.marker = new google.maps.Marker({
-          position: center,
-          map: state.map,
-          draggable: true,
-          title: "Tu ubicación",
-        });
-        state.geocoder = new google.maps.Geocoder();
-        state.marker.addListener("dragend", onPinMove);
-        state.map.addListener("click", (e) => {
-          state.marker.setPosition(e.latLng);
-          onPinMove();
-        });
-
-        const p = getProfile();
-        if (p.direccion?.tipo === "mapa" && p.direccion.lat != null) {
-          const pos = { lat: p.direccion.lat, lng: p.direccion.lng };
-          state.map.setCenter(pos);
-          state.marker.setPosition(pos);
-        }
-        applyPin();
-      })
-      .catch(() => {
-        mapEl.innerHTML = `
-          <div class="p-4 text-center text-sm text-gray-500">
-            ⚠️ No se pudo cargar el mapa.<br>Usá <b>Escribir</b>.
-          </div>
-        `;
-      });
-  }
-
-  async function onPinMove() {
-    const pos = state.marker.getPosition();
-    state.mapLat = pos.lat();
-    state.mapLng = pos.lng();
-    state.mapAddress = await reverseGeocode(state.geocoder, state.mapLat, state.mapLng);
-    mapAddrText.textContent = state.mapAddress;
-    mapAddrBox.classList.remove("hidden");
-  }
-
-  async function applyPin() {
-    const pos = state.marker.getPosition();
-    state.mapLat = pos.lat();
-    state.mapLng = pos.lng();
-    state.mapAddress = await reverseGeocode(state.geocoder, state.mapLat, state.mapLng);
-    mapAddrText.textContent = state.mapAddress;
-    mapAddrBox.classList.remove("hidden");
   }
 
   geoBtn?.addEventListener("click", async () => {
@@ -444,16 +439,20 @@ import { GOOGLE_MAPS_API_KEY, INITIAL_LAT, INITIAL_LNG } from "../scripts/gmaps.
     try {
       const { lat, lng } = await geolocate();
       if (state.map && state.marker) {
-        const p = new google.maps.LatLng(lat, lng);
-        state.map.setCenter(p);
-        state.map.setZoom(17);
-        state.marker.setPosition(p);
-        await onPinMove();
+        state.map.setView([lat, lng], 17);
+        state.marker.setLatLng([lat, lng]);
+        state.mapLat = lat;
+        state.mapLng = lng;
+        state.mapAddress = await reverseGeocode(lat, lng);
+        mapAddrText.textContent = state.mapAddress;
+        if (mapsLinkEl) mapsLinkEl.href = mapsLink(lat, lng);
+        mapAddrBox.classList.remove("hidden");
       } else {
         state.mapLat = lat;
         state.mapLng = lng;
         state.mapAddress = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
         mapAddrText.textContent = state.mapAddress;
+        if (mapsLinkEl) mapsLinkEl.href = mapsLink(lat, lng);
         mapAddrBox.classList.remove("hidden");
       }
     } catch (err) {

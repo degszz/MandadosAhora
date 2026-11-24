@@ -49,6 +49,13 @@ const titulo = servicio.titulo ?? servicio.servicio;
         </h1>
       </div>
 
+      <!-- Aviso de servicio cerrado (lo muestra el script si corresponde) -->
+      <div id="svc-closed-notice" style="display:none;width:100%;margin-top:1.25rem;background:linear-gradient(135deg,#1e3a5f,#1e40af);border-radius:1rem;padding:1.1rem 1.25rem;color:#fff;text-align:center">
+        <p style="font-size:1rem;font-weight:800;margin:0">🔒 <span id="svc-closed-title">Este servicio está cerrado ahora</span></p>
+        <p id="svc-closed-hours" style="font-size:0.8rem;opacity:0.85;margin:0.3rem 0 0"></p>
+        <a href="/servicios/24horas" style="display:inline-block;margin-top:0.8rem;background:#fbbf24;color:#1e3a5f;font-weight:700;font-size:0.85rem;padding:0.55rem 1.1rem;border-radius:0.7rem;text-decoration:none">Pedir con el servicio 24 Horas →</a>
+      </div>
+
       <form
         id="servicio-form"
         class="w-full bg-white shadow-lg rounded-2xl p-6 mt-6 space-y-4 border border-gray-100 animate-fade-in-up animate-duration-slow animate-delay-200"
@@ -276,6 +283,7 @@ const titulo = servicio.titulo ?? servicio.servicio;
 
 <script>
   import { addItem } from "../../scripts/cart.js";
+  import { fetchBusinessStatus, isServiceScheduleOpen } from "../../scripts/business.js";
   import { getProfile, setProfile } from "../../scripts/profile.js";
   import {
     loadLeaflet,
@@ -438,9 +446,35 @@ const titulo = servicio.titulo ?? servicio.servicio;
     el?.addEventListener("input", clearError);
   });
 
+  // ----- ¿Servicio abierto? (estado del negocio + horario propio) -----
+  let servicioCerrado = false;
+  (async () => {
+    const slug = form?.dataset.slug;
+    if (!slug || slug === "24horas") return; // 24hs siempre disponible
+    const { online, schedules, ok } = await fetchBusinessStatus();
+    if (!ok) return; // sin datos no bloqueamos
+    const sched = schedules.find((s) => s.service_slug === slug);
+    const abierto = online && isServiceScheduleOpen(sched);
+    if (abierto) return;
+    servicioCerrado = true;
+    const notice = document.getElementById("svc-closed-notice");
+    const hours = document.getElementById("svc-closed-hours");
+    if (!online) {
+      document.getElementById("svc-closed-title").textContent = "Estamos fuera de horario";
+      hours.textContent = "Ahora solo está disponible el servicio 24 Horas.";
+    } else if (sched?.open_time) {
+      hours.textContent = `Horario: ${sched.open_time.slice(0, 5)} a ${sched.close_time.slice(0, 5)}`;
+    }
+    notice.style.display = "block";
+    form.style.opacity = "0.5";
+    form.style.pointerEvents = "none";
+    if (btn) btn.disabled = true;
+  })();
+
   form?.addEventListener("submit", (e) => {
     e.preventDefault();
     clearError();
+    if (servicioCerrado) return;
 
     const servicio = form.dataset.servicio;
     const nombre = nombreEl.value.trim();

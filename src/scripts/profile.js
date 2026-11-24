@@ -1,6 +1,6 @@
 const STORAGE_KEY = "mandados_profile_v1";
 
-const empty = () => ({ nombre: "", direccion: null });
+const empty = () => ({ nombre: "", telefono: "", direccion: null });
 
 export function getProfile() {
   if (typeof localStorage === "undefined") return empty();
@@ -10,6 +10,7 @@ export function getProfile() {
     const data = JSON.parse(raw);
     return {
       nombre: typeof data?.nombre === "string" ? data.nombre : "",
+      telefono: typeof data?.telefono === "string" ? data.telefono : "",
       direccion: data?.direccion ?? null,
     };
   } catch {

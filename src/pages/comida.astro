@@ -1,0 +1,187 @@
+---
+import Layout from "../layouts/Layout.astro";
+import "../styles/global.css";
+---
+
+<Layout title="¿Qué comemos? · Mandados Ahora">
+  <section
+    class="w-full px-4 pt-[85px] pb-8 -mt-[75px]"
+    style="background:linear-gradient(165deg,#ffedd5 0%,#fff7ed 40%,#f8fafc 100%);"
+  >
+    <div class="max-w-[1100px] mx-auto text-center">
+      <p class="text-sm font-semibold uppercase tracking-widest" style="color:#ea580c">Comida de Monte</p>
+      <h1 class="mt-2 text-4xl md:text-5xl font-extrabold text-[#0b0e14]">¿Qué comemos?</h1>
+      <p class="mt-3 text-gray-600 max-w-xl mx-auto">
+        Todos los emprendimientos de comida del pueblo en un solo lugar.
+        Elegí y pedile directo al local.
+      </p>
+
+      <div class="mt-6 max-w-md mx-auto">
+        <input
+          id="loc-search"
+          type="search"
+          placeholder="Buscar: hamburguesa, pizza, nombre del local..."
+          class="w-full px-4 py-3 rounded-xl border border-orange-200 bg-white shadow-sm outline-none focus:ring-2 focus:ring-orange-300"
+        />
+      </div>
+    </div>
+  </section>
+
+  <div class="w-full max-w-[1100px] mx-auto px-4 pb-16">
+    <!-- Filtros -->
+    <div class="flex items-center gap-2 overflow-x-auto py-3" id="loc-chips" style="scrollbar-width:none"></div>
+    <label class="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none mb-4">
+      <input id="loc-open-only" type="checkbox" class="w-4 h-4 accent-green-600" />
+      Solo abiertos ahora
+    </label>
+
+    <!-- Grid -->
+    <div id="loc-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <p style="grid-column:1/-1;text-align:center;color:#9ca3af;padding:3rem 0">Cargando locales...</p>
+    </div>
+
+    <!-- Sumate -->
+    <div style="margin-top:2.5rem;background:#fff;border:1.5px dashed #fdba74;border-radius:1rem;padding:1.25rem;text-align:center">
+      <p style="font-weight:700;color:#1f2937;margin:0">¿Tenés un emprendimiento de comida en Monte?</p>
+      <p style="font-size:0.85rem;color:#6b7280;margin:0.3rem 0 0.85rem">Aparecé acá gratis. Mandanos tu WhatsApp, Instagram o web.</p>
+      <a
+        id="loc-sumate"
+        target="_blank"
+        rel="noopener"
+        style="display:inline-block;background:#ea580c;color:#fff;font-weight:600;font-size:0.88rem;padding:0.6rem 1.2rem;border-radius:0.75rem;text-decoration:none"
+      >Quiero sumar mi local</a>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import {
+    CATEGORIAS,
+    emojiFor,
+    isOpenNow,
+    horarioHoy,
+    waLink,
+    igLink,
+    safeUrl,
+    fetchLocales,
+  } from "../scripts/locales.js";
+
+  const MANDADOS_WA = "5492271415182";
+
+  const grid = document.getElementById("loc-grid");
+  const chips = document.getElementById("loc-chips");
+  const search = document.getElementById("loc-search") as HTMLInputElement;
+  const openOnly = document.getElementById("loc-open-only") as HTMLInputElement;
+
+  (document.getElementById("loc-sumate") as HTMLAnchorElement).href =
+    waLink(MANDADOS_WA, "Hola! Tengo un emprendimiento de comida y quiero aparecer en ¿Qué comemos?") || "#";
+
+  let locales: any[] = [];
+  let categoria = "Todos";
+
+  function esc(s: unknown) {
+    return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+  }
+
+  function renderChips() {
+    const usadas = new Set(locales.map((l) => l.categoria));
+    const lista = ["Todos", ...CATEGORIAS.map((c) => c.nombre).filter((n) => usadas.has(n))];
+    // Categorías cargadas que no están en la lista base
+    usadas.forEach((c) => { if (!lista.includes(c)) lista.push(c); });
+
+    chips.innerHTML = lista
+      .map((c) => {
+        const active = c === categoria;
+        const label = c === "Todos" ? "Todos" : `${emojiFor(c)} ${c}`;
+        return `<button type="button" data-cat="${esc(c)}" style="flex-shrink:0;white-space:nowrap;font-size:0.85rem;font-weight:600;padding:0.45rem 0.9rem;border-radius:9999px;cursor:pointer;border:1.5px solid ${active ? "#ea580c" : "#e5e7eb"};background:${active ? "#ea580c" : "#fff"};color:${active ? "#fff" : "#374151"}">${esc(label)}</button>`;
+      })
+      .join("");
+  }
+
+  chips.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest("button[data-cat]") as HTMLElement | null;
+    if (!b) return;
+    categoria = b.dataset.cat!;
+    renderChips();
+    renderGrid();
+  });
+
+  function boton(href: string | null, label: string, bg: string, color: string, border = bg) {
+    if (!href) return "";
+    return `<a href="${esc(href)}" target="_blank" rel="noopener" style="flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:0.3rem;font-size:0.8rem;font-weight:600;padding:0.55rem 0.4rem;border-radius:0.6rem;text-decoration:none;background:${bg};color:${color};border:1.5px solid ${border}">${label}</a>`;
+  }
+
+  function card(l: any) {
+    const open = isOpenNow(l.horario);
+    const hoy = horarioHoy(l.horario);
+    const logo = safeUrl(l.logo_url);
+    const estado =
+      open === null
+        ? ""
+        : open
+          ? `<span style="font-size:0.68rem;font-weight:700;color:#166534;background:#dcfce7;padding:0.15rem 0.5rem;border-radius:9999px">● Abierto</span>`
+          : `<span style="font-size:0.68rem;font-weight:700;color:#991b1b;background:#fee2e2;padding:0.15rem 0.5rem;border-radius:9999px">Cerrado</span>`;
+
+    const wa = waLink(l.whatsapp, `Hola ${l.nombre}! Te encontré en Mandados Ahora y quiero hacer un pedido.`);
+    const traerlo = !l.delivery_propio
+      ? `<a href="${esc(waLink(MANDADOS_WA, `Hola! Quiero que me traigan un pedido de ${l.nombre}.`))}" target="_blank" rel="noopener" style="display:block;margin-top:0.5rem;text-align:center;font-size:0.78rem;font-weight:600;color:#2563eb;padding:0.45rem;border-radius:0.6rem;background:#EBF3FF;text-decoration:none">🛵 No tiene delivery: te lo llevamos nosotros</a>`
+      : "";
+
+    return `
+      <article style="background:#fff;border:1px solid #f1f5f9;border-radius:1rem;padding:1rem;box-shadow:0 2px 10px rgba(0,0,0,0.04);display:flex;flex-direction:column;opacity:${open === false ? "0.7" : "1"}">
+        <div style="display:flex;gap:0.75rem;align-items:center">
+          ${logo
+            ? `<img src="${esc(logo)}" alt="" loading="lazy" style="width:56px;height:56px;border-radius:0.85rem;object-fit:cover;flex-shrink:0;background:#f3f4f6" />`
+            : `<div style="width:56px;height:56px;border-radius:0.85rem;flex-shrink:0;background:#fff7ed;display:flex;align-items:center;justify-content:center;font-size:1.7rem">${emojiFor(l.categoria)}</div>`}
+          <div style="min-width:0;flex:1">
+            <h2 style="font-size:1rem;font-weight:700;color:#111827;margin:0;line-height:1.2">${esc(l.nombre)}</h2>
+            <div style="display:flex;gap:0.35rem;align-items:center;flex-wrap:wrap;margin-top:0.3rem">
+              <span style="font-size:0.7rem;color:#9a3412;background:#ffedd5;padding:0.15rem 0.5rem;border-radius:9999px">${esc(l.categoria)}</span>
+              ${estado}
+            </div>
+          </div>
+        </div>
+        ${l.descripcion ? `<p style="font-size:0.82rem;color:#4b5563;margin:0.7rem 0 0;line-height:1.4">${esc(l.descripcion)}</p>` : ""}
+        <p style="font-size:0.72rem;color:#9ca3af;margin:0.5rem 0 0">
+          ${hoy ? `🕐 ${esc(hoy)} · ` : ""}${l.delivery_propio ? "Tiene delivery" : "Solo retiro"}
+        </p>
+        <div style="display:flex;gap:0.4rem;margin-top:auto;padding-top:0.85rem">
+          ${boton(wa, "WhatsApp", "#22c55e", "#fff")}
+          ${boton(igLink(l.instagram), "Instagram", "#fff", "#c026d3", "#f5d0fe")}
+          ${boton(safeUrl(l.web_url), "Ver menú", "#fff", "#374151", "#e5e7eb")}
+        </div>
+        ${traerlo}
+      </article>`;
+  }
+
+  function renderGrid() {
+    const q = search.value.trim().toLowerCase();
+    let lista = locales.filter((l) => {
+      if (categoria !== "Todos" && l.categoria !== categoria) return false;
+      if (openOnly.checked && isOpenNow(l.horario) !== true) return false;
+      if (q && !`${l.nombre} ${l.categoria} ${l.descripcion || ""}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+    // Abiertos primero
+    lista = lista.sort((a, b) => Number(isOpenNow(b.horario) === true) - Number(isOpenNow(a.horario) === true));
+
+    if (!locales.length) {
+      grid.innerHTML = `<p style="grid-column:1/-1;text-align:center;color:#6b7280;padding:3rem 0">Estamos sumando los primeros locales. ¡Volvé pronto!</p>`;
+      return;
+    }
+    grid.innerHTML = lista.length
+      ? lista.map(card).join("")
+      : `<p style="grid-column:1/-1;text-align:center;color:#6b7280;padding:3rem 0">No encontramos locales con ese filtro.</p>`;
+  }
+
+  search.addEventListener("input", renderGrid);
+  openOnly.addEventListener("change", renderGrid);
+
+  (async () => {
+    locales = await fetchLocales();
+    renderChips();
+    renderGrid();
+    // Refrescar estado abierto/cerrado cada minuto
+    setInterval(renderGrid, 60_000);
+  })();
+</script>

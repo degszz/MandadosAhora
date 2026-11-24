@@ -24,9 +24,11 @@ const PRECIO_TRANSFERENCIA = 3000;
 <script>
   import { getItems, clear } from "../scripts/cart.js";
   import { SERVICIOS } from "../data/servicios.js";
-  import { createOrder, updateOrder } from "../scripts/orders.js";
-  import { createStripeSession, createMPPreference } from "../scripts/mercadopago.js";
+  import { createOrder } from "../scripts/orders.js";
+  import { createMPPreference } from "../scripts/mercadopago.js";
   import { getProfile, setProfile } from "../scripts/profile.js";
+  import { isOfflineNow } from "../scripts/business.js";
+  import { whatsappOrderUrl } from "../scripts/whatsapp.js";
 
   import {
     loadLeaflet,
@@ -40,30 +42,25 @@ const PRECIO_TRANSFERENCIA = 3000;
   const INITIAL_LAT = parseFloat(root.dataset.initialLat);
   const INITIAL_LNG = parseFloat(root.dataset.initialLng);
 
-  const WA_NUMBER = "2271415182";
   const ALIAS_MP = "mandadosahora";
 
-  // Pricing
-  const PRICE_REGULAR = 3000;
-  const PRICE_24H_OFFHOURS = 3500;
-  const COMMISSION_REGULAR = 2000;
-  const COMMISSION_24H_OFFHOURS = 3500;
+  // Pricing — nuevo modelo
+  // Service fee: lo que cobra el repartidor (va a su cuenta bancaria)
+  // 15% de la compra: se calcula DESPUES de la entrega sobre el ticket real
+  const SERVICE_FEE_ONLINE = 2500;
+  const SERVICE_FEE_OFFLINE = 3500;
+  const PLATFORM_FEE_PERCENT = 15;
 
-  function is24hOffHours() {
-    const now = new Date();
-    const h = now.getHours();
-    const day = now.getDay();
-    return h < 8 || h >= 21 || day === 0;
-  }
+  // Fuera de horario: estado real del negocio (ver src/scripts/business.js)
+  const is24hOffHours = isOfflineNow;
 
-  function priceFor(item) {
-    if ((item.slug === "24horas") && is24hOffHours()) return PRICE_24H_OFFHOURS;
-    return PRICE_REGULAR;
+  function serviceFeeFor(item) {
+    if ((item.slug === "24horas") && is24hOffHours()) return SERVICE_FEE_OFFLINE;
+    return SERVICE_FEE_ONLINE;
   }
 
   function commissionFor(item) {
-    if ((item.slug === "24horas") && is24hOffHours()) return COMMISSION_24H_OFFHOURS;
-    return COMMISSION_REGULAR;
+    return serviceFeeFor(item);
   }
 
   function generateDeliveryCode() {
@@ -191,6 +188,7 @@ const PRECIO_TRANSFERENCIA = 3000;
     }
 
     const nombrePrefill = profile.nombre || firstNonEmpty(items, "nombre") || "";
+    const telefonoPrefill = profile.telefono || "";
 
     root.innerHTML = `
       <form id="checkout-form" style="background:#fff;border-radius:1rem;box-shadow:0 10px 25px -5px rgba(0,0,0,0.08);padding:1.5rem;width:100%;display:flex;flex-direction:column;gap:1.25rem;border:1px solid #f3f4f6">
@@ -224,6 +222,15 @@ const PRECIO_TRANSFERENCIA = 3000;
             value="${escapeHtml(nombrePrefill)}"
             placeholder="Tu nombre (opcional)"
             style="width:100%;padding:0.6rem 0.85rem;border:1px solid #d1d5db;border-radius:0.6rem;outline:none;font-size:0.9rem"
+            onfocus="this.style.borderColor='#377DEC'"
+            onblur="this.style.borderColor='#d1d5db'"
+          />
+          <input
+            id="ck-telefono"
+            type="tel"
+            value="${escapeHtml(telefonoPrefill)}"
+            placeholder="Tu WhatsApp (ej: 2226123456)"
+            style="width:100%;padding:0.6rem 0.85rem;border:1px solid #d1d5db;border-radius:0.6rem;outline:none;font-size:0.9rem;margin-top:0.5rem"
             onfocus="this.style.borderColor='#377DEC'"
             onblur="this.style.borderColor='#d1d5db'"
           />
@@ -328,24 +335,15 @@ const PRECIO_TRANSFERENCIA = 3000;
           <h3 style="font-size:0.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin:0 0 0.5rem">
             Método de pago *
           </h3>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.6rem">
-            <button type="button" class="pago-card" data-metodo="stripe"
-              style="background:#fff;border:2px solid #e5e7eb;border-radius:0.875rem;padding:0.85rem;text-align:left;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:0.2rem">
-              <div style="display:flex;align-items:center;gap:0.4rem">
-                <span style="font-size:1.15rem">💳</span>
-                <b style="color:#1f2937;font-size:0.85rem">Tarjeta</b>
-              </div>
-              <span style="color:#6366f1;font-weight:700;font-size:0.95rem">${formatARS(items.reduce((s, it) => s + priceFor(it), 0))}</span>
-              <span style="font-size:0.65rem;color:#6b7280">Crédito/Débito via Stripe</span>
-            </button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem">
             <button type="button" class="pago-card" data-metodo="mercadopago"
               style="background:#fff;border:2px solid #e5e7eb;border-radius:0.875rem;padding:0.85rem;text-align:left;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:0.2rem">
               <div style="display:flex;align-items:center;gap:0.4rem">
                 <span style="font-size:1.15rem">🏦</span>
                 <b style="color:#1f2937;font-size:0.85rem">MercadoPago</b>
               </div>
-              <span style="color:#00b1ea;font-weight:700;font-size:0.95rem">${formatARS(items.reduce((s, it) => s + priceFor(it), 0))}</span>
-              <span style="font-size:0.65rem;color:#6b7280">QR / Transferencia / MP</span>
+              <span style="color:#00b1ea;font-weight:700;font-size:0.95rem">${formatARS(items.reduce((s, it) => s + serviceFeeFor(it), 0))}</span>
+              <span style="font-size:0.65rem;color:#6b7280">Tarjeta / QR / Dinero en MP</span>
             </button>
             <button type="button" class="pago-card" data-metodo="efectivo"
               style="background:#fff;border:2px solid #e5e7eb;border-radius:0.875rem;padding:0.85rem;text-align:left;cursor:pointer;transition:all 0.15s;display:flex;flex-direction:column;gap:0.2rem">
@@ -353,7 +351,7 @@ const PRECIO_TRANSFERENCIA = 3000;
                 <span style="font-size:1.15rem">💵</span>
                 <b style="color:#1f2937;font-size:0.85rem">Efectivo</b>
               </div>
-              <span style="color:#16a34a;font-weight:700;font-size:0.95rem">${formatARS(items.reduce((s, it) => s + priceFor(it), 0))}</span>
+              <span style="color:#16a34a;font-weight:700;font-size:0.95rem">${formatARS(items.reduce((s, it) => s + serviceFeeFor(it), 0))}</span>
               <span style="font-size:0.65rem;color:#6b7280">Pagás al recibir</span>
             </button>
           </div>
@@ -527,6 +525,7 @@ const PRECIO_TRANSFERENCIA = 3000;
       }
 
       const nombre = document.getElementById("ck-nombre").value.trim();
+      const telefono = document.getElementById("ck-telefono").value.trim();
 
       const ubicacion = {
         tipo: direccion.tipo,
@@ -546,16 +545,17 @@ const PRECIO_TRANSFERENCIA = 3000;
         cantidad: it.cantidad ?? 1,
       }));
 
-      const monto = items.reduce((s, it) => s + priceFor(it), 0);
+      const monto = items.reduce((s, it) => s + serviceFeeFor(it), 0);
       const commission = items.reduce((s, it) => s + commissionFor(it), 0);
       const deliveryCode = generateDeliveryCode();
 
-      setProfile({ nombre, direccion });
+      setProfile({ nombre, telefono, direccion });
 
       let order;
       try {
         order = await createOrder({
           nombre,
+          telefono,
           servicios,
           ubicacion,
           pago: { metodo: state.pagoMetodo, monto },
@@ -570,24 +570,22 @@ const PRECIO_TRANSFERENCIA = 3000;
 
       const orderId = order.id;
 
-      if (state.pagoMetodo === "stripe") {
-        try {
-          showLoading("Conectando con Stripe...");
-          const session = await createStripeSession({
+      // Notificar al cliente por WhatsApp (mejor esfuerzo, no bloquea)
+      if (telefono) {
+        const cleanPhone = telefono.replace(/^\+?54\s*/, "").replace(/\D/g, "");
+        fetch(`${import.meta.env.PUBLIC_SUPABASE_URL || "https://aiagaddxujtbyudriulh.supabase.co"}/functions/v1/whatsapp-send`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: cleanPhone.startsWith("549") ? cleanPhone : "549" + cleanPhone,
             orderId,
-            amount: monto,
-            description: `Mandados Ahora — ${servicios.length} servicio${servicios.length > 1 ? "s" : ""}`,
-          });
-          const waUrl = buildWhatsappMessage({ order, nombre, servicios, direccion, pago: { metodo: "stripe", monto }, paymentUrl: null, deliveryCode });
-          window.open(waUrl, "_blank");
-          clear();
-          window.location.href = session.paymentUrl;
-        } catch (err) {
-          console.error(err);
-          showError(err.message || "No se pudo conectar con Stripe. Probá de nuevo.");
-        }
+            status: "created",
+            trackingUrl: `${window.location.origin}/pedido?id=${orderId}`,
+          }),
+        }).catch(() => {});
+      }
 
-      } else if (state.pagoMetodo === "mercadopago") {
+      if (state.pagoMetodo === "mercadopago") {
         try {
           showLoading("Conectando con MercadoPago...");
           const pref = await createMPPreference({
@@ -595,15 +593,14 @@ const PRECIO_TRANSFERENCIA = 3000;
             amount: monto,
             description: `Mandados Ahora — ${servicios.length} servicio${servicios.length > 1 ? "s" : ""}`,
           });
-          updateOrder(orderId, { payment_reference: pref.preferenceId }).catch(() => {});
-          showMPPayment(order, pref, orderId, { nombre, servicios, direccion, pago: { metodo: "mercadopago", monto }, deliveryCode });
+          showMPPayment(order, pref, orderId, { nombre, telefono, servicios, direccion, pago: { metodo: "mercadopago", monto }, deliveryCode });
         } catch (err) {
           console.error(err);
           showError(err.message || "No se pudo conectar con MercadoPago. Probá de nuevo.");
         }
 
       } else {
-        const waUrl = buildWhatsappMessage({ order, nombre, servicios, direccion, pago: { metodo: "efectivo", monto }, paymentUrl: null, deliveryCode });
+        const waUrl = buildWhatsappMessage({ order, nombre, telefono, servicios, direccion, pago: { metodo: "efectivo", monto }, paymentUrl: null, deliveryCode });
         window.open(waUrl, "_blank");
         showCashSuccess(order, orderId, deliveryCode, monto);
         clear();
@@ -614,42 +611,18 @@ const PRECIO_TRANSFERENCIA = 3000;
   // ==========================================================
   //                       MENSAJE WA
   // ==========================================================
-  function buildWhatsappMessage({ order, nombre, servicios, direccion, pago, paymentUrl, deliveryCode }) {
-    const dirTxt = direccion?.address || direccion?.texto || "";
-    const mapsUrl =
-      direccion?.lat != null && direccion?.lng != null
-        ? `https://www.google.com/maps/search/?api=1&query=${direccion.lat},${direccion.lng}`
-        : "";
-
-    const lines = [`*NUEVO PEDIDO*`, ``];
-    if (nombre) lines.push(`Nombre: ${nombre}`);
-    if (dirTxt) lines.push(`Direccion: ${dirTxt}`);
-    if (mapsUrl) lines.push(`Maps: ${mapsUrl}`);
-    lines.push(``);
-
-    lines.push(`— Detalle (${servicios.length}) —`);
-    servicios.forEach((s, i) => {
-      lines.push(``);
-      lines.push(`*${i + 1}. ${s.servicio}*`);
-      if (s.negocio) lines.push(`Local: ${s.negocio}`);
-      if (s.descripcion) lines.push(`${s.descripcion}`);
+  function buildWhatsappMessage({ order, nombre, telefono, servicios, direccion, pago, paymentUrl, deliveryCode }) {
+    return whatsappOrderUrl({
+      orderId: order.id,
+      nombre,
+      telefono,
+      servicios,
+      direccion,
+      total: pago.monto || items.reduce((s, it) => s + serviceFeeFor(it), 0),
+      metodo: pago.metodo,
+      paymentUrl,
+      deliveryCode,
     });
-    lines.push(``);
-
-    const metodoLabel = {
-      stripe: `Tarjeta (Stripe)`,
-      mercadopago: `MercadoPago`,
-      efectivo: `Efectivo al recibir`,
-    };
-    const total = pago.monto || items.reduce((s, it) => s + priceFor(it), 0);
-    lines.push(`*Total: ${formatARS(total)}* (${servicios.length} servicio${servicios.length > 1 ? "s" : ""})`);
-    lines.push(`Pago: ${metodoLabel[pago.metodo] || pago.metodo}`);
-    if (paymentUrl) lines.push(`Link: ${paymentUrl}`);
-    if (deliveryCode) lines.push(``, `*Codigo de entrega: ${deliveryCode}* — Darselo al repartidor al recibir.`);
-    lines.push(`Pedido: ${order.id}`);
-
-    const msg = lines.join("\n");
-    return `https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`;
   }
 
   // ==========================================================
@@ -695,6 +668,18 @@ const PRECIO_TRANSFERENCIA = 3000;
           </p>
         </div>
 
+        <!-- Subir comprobante de transferencia -->
+        <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:0.75rem;padding:0.85rem;text-align:center">
+          <label style="display:flex;align-items:center;justify-content:center;gap:0.4rem;cursor:pointer;color:#475569;font-size:0.82rem;font-weight:500">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span id="ck-proof-label">Subir comprobante (opcional)</span>
+            <input type="file" id="ck-proof-file" accept="image/*" style="display:none"
+              onchange="document.getElementById('ck-proof-label').textContent = this.files[0] ? this.files[0].name : 'Subir comprobante (opcional)'" />
+          </label>
+        </div>
+
         <button type="button" id="ck-send-wa"
           style="width:100%;background:#22c55e;color:#fff;border:none;padding:0.85rem;border-radius:0.75rem;font-size:0.95rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:0.5rem">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -718,10 +703,34 @@ const PRECIO_TRANSFERENCIA = 3000;
       </div>
     `;
 
-    document.getElementById("ck-send-wa").addEventListener("click", () => {
+    document.getElementById("ck-send-wa").addEventListener("click", async () => {
+      // Subir comprobante si hay archivo seleccionado
+      const proofFile = document.getElementById("ck-proof-file")?.files?.[0];
+      if (proofFile && supabaseOrderId) {
+        try {
+          const sb = getSupabase();
+          if (sb) {
+            const ext = proofFile.name.split(".").pop();
+            const path = `comprobantes/${supabaseOrderId}_${Date.now()}.${ext}`;
+            const { data: up, error: upErr } = await sb.storage.from("comprobantes").upload(path, proofFile, {
+              cacheControl: "3600", upsert: true,
+            });
+            if (!upErr && up) {
+              const { data: pub } = sb.storage.from("comprobantes").getPublicUrl(path);
+              if (pub?.publicUrl) {
+                await sb.rpc("set_payment_proof", { p_id: supabaseOrderId, p_url: pub.publicUrl });
+              }
+            }
+          }
+        } catch (e) {
+          console.error("[checkout] Error subiendo comprobante:", e);
+        }
+      }
+
       const waUrl = buildWhatsappMessage({
         order,
         nombre: sendData.nombre,
+        telefono: sendData.telefono,
         servicios: sendData.servicios,
         direccion: sendData.direccion,
         pago: sendData.pago,

@@ -18,6 +18,12 @@ export default function RepartidorPanel({ mode = "repartidor", todayOnly = true 
   const [busyOrderId, setBusyOrderId] = useState(null);
   const [isAvailable, setIsAvailable] = useState(true);
   const [togglingAvail, setTogglingAvail] = useState(false);
+  // Datos bancarios
+  const [aliasCbu, setAliasCbu] = useState("");
+  const [banco, setBanco] = useState("");
+  const [savingBancario, setSavingBancario] = useState(false);
+  const [bancarioSaved, setBancarioSaved] = useState(false);
+  const [showBancario, setShowBancario] = useState(false);
 
   const sb = useMemo(() => getSupabase(), []);
 
@@ -53,6 +59,8 @@ export default function RepartidorPanel({ mode = "repartidor", todayOnly = true 
       }
       setProfile(p);
       setIsAvailable(p.is_available !== false);
+      setAliasCbu(p.alias_cbu || "");
+      setBanco(p.banco || "");
       await fetchOrders();
       setLoading(false);
     })();
@@ -100,10 +108,35 @@ export default function RepartidorPanel({ mode = "repartidor", todayOnly = true 
       const { error } = await sb.rpc("claim_order", { p_order_id: orderId });
       if (error) throw error;
       await fetchOrders();
+      const claimed = orders.find((o) => o.id === orderId);
+      if (claimed) notifyWhatsapp({ ...claimed, status: "confirmado" }, "confirmado");
     } catch (e) {
       setError(e.message || "No se pudo tomar el pedido");
     } finally {
       setBusyOrderId(null);
+    }
+  };
+
+  const notifyWhatsapp = async (order, newStatus) => {
+    const phone = order?.customer_phone;
+    if (!phone) return;
+    try {
+      await fetch(
+        `${import.meta.env.PUBLIC_SUPABASE_URL || "https://aiagaddxujtbyudriulh.supabase.co"}/functions/v1/whatsapp-send`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: phone.startsWith("549") ? phone : "549" + phone.replace(/^\+?54\s*/, "").replace(/\D/g, ""),
+            orderId: order.id,
+            status: newStatus,
+            repartidor: profile?.full_name || null,
+            trackingUrl: `https://mandadosahora.com.ar/pedido?id=${order.id}`,
+          }),
+        }
+      );
+    } catch (e) {
+      console.error("[whatsapp]", e);
     }
   };
 
@@ -115,6 +148,8 @@ export default function RepartidorPanel({ mode = "repartidor", todayOnly = true 
       const { error } = await sb.from("orders").update({ status }).eq("id", orderId);
       if (error) throw error;
       await fetchOrders();
+      const updated = orders.find((o) => o.id === orderId);
+      if (updated) notifyWhatsapp({ ...updated, status }, status);
     } catch (e) {
       setError(e.message || "No se pudo cambiar el estado");
     } finally {
@@ -146,6 +181,22 @@ export default function RepartidorPanel({ mode = "repartidor", todayOnly = true 
     const { error } = await sb.from("profiles").update({ is_available: newVal }).eq("id", profile.id);
     if (!error) setIsAvailable(newVal);
     setTogglingAvail(false);
+  };
+
+  const saveBancarios = async () => {
+    if (!sb || !profile) return;
+    setSavingBancario(true);
+    setBancarioSaved(false);
+    const cbuClean = aliasCbu.replace(/\s/g, "").replace(/-/g, "");
+    const { error } = await sb.from("profiles").update({
+      alias_cbu: cbuClean || null,
+      banco: banco.trim() || null,
+    }).eq("id", profile.id);
+    if (!error) {
+      setBancarioSaved(true);
+      setTimeout(() => setBancarioSaved(false), 2500);
+    }
+    setSavingBancario(false);
   };
 
   const logout = async () => {
@@ -228,6 +279,71 @@ export default function RepartidorPanel({ mode = "repartidor", todayOnly = true 
         })}
       </div>
 
+      {/* Datos bancarios (solo repartidor) */}
+      {mode === "repartidor" && (
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:0.875rem;padding:0.85rem 1rem;margin-bottom:1rem">
+          <button
+            onClick={() => setShowBancario(!showBancario)}
+            style="display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;cursor:pointer;padding:0"
+          >
+            <div style="display:flex;align-items:center;gap:0.5rem">
+              <span style="font-size:1.1rem">🏦</span>
+              <span style="font-size:0.85rem;font-weight:700;color:#1f2937">Datos bancarios para cobros</span>
+              {(aliasCbu || banco) && !showBancario && (
+                <span style="font-size:0.65rem;color:#16a34a;font-weight:600">
+                  {aliasCbu ? aliasCbu.slice(0, 10) + "…" : ""} ✓
+                </span>
+              )}
+            </div>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+              style={`transition:transform 0.2s;transform:rotate(${showBancario ? "180" : "0"}deg)`}>
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+
+          {showBancario && (
+            <div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.5rem">
+              <p style="font-size:0.72rem;color:#6b7280;margin:0">
+                Acá recibirás el pago de tus servicios ($2.500 c/u online, $3.500 c/u 24h fuera de horario).
+              </p>
+              <label style="display:block">
+                <span style="font-size:0.7rem;font-weight:600;color:#374151">Alias o CBU</span>
+                <input
+                  type="text"
+                  value={aliasCbu}
+                  onInput={(e) => { setAliasCbu(e.currentTarget.value); setBancarioSaved(false); }}
+                  placeholder="Ej: gonzalo.mp.uat"
+                  maxLength={30}
+                  style="margin-top:0.2rem;width:100%;padding:0.5rem 0.65rem;border:1px solid #d1d5db;border-radius:0.5rem;outline:none;font-size:0.85rem;box-sizing:border-box"
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "#377DEC"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "#d1d5db"; }}
+                />
+              </label>
+              <label style="display:block">
+                <span style="font-size:0.7rem;font-weight:600;color:#374151">Banco</span>
+                <input
+                  type="text"
+                  value={banco}
+                  onInput={(e) => { setBanco(e.currentTarget.value); setBancarioSaved(false); }}
+                  placeholder="Ej: Banco Provincia, MercadoPago, Ualá"
+                  maxLength={50}
+                  style="margin-top:0.2rem;width:100%;padding:0.5rem 0.65rem;border:1px solid #d1d5db;border-radius:0.5rem;outline:none;font-size:0.85rem;box-sizing:border-box"
+                  onFocus={(e) => { e.currentTarget.style.borderColor = "#377DEC"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = "#d1d5db"; }}
+                />
+              </label>
+              <button
+                onClick={saveBancarios}
+                disabled={savingBancario || (!aliasCbu && !banco)}
+                style={`padding:0.5rem 1rem;border-radius:0.5rem;border:none;font-weight:600;font-size:0.82rem;cursor:${savingBancario || (!aliasCbu && !banco) ? "not-allowed" : "pointer"};background:${bancarioSaved ? "#16a34a" : "#377DEC"};color:#fff;opacity:${savingBancario ? "0.6" : "1"};align-self:flex-start`}
+              >
+                {bancarioSaved ? "✓ Guardado" : savingBancario ? "Guardando..." : "Guardar datos"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Lista */}
       {filter === "ganancias" ? (
         <GananciasPanel profile={profile} orders={orders} mode={mode} />
@@ -255,6 +371,7 @@ export default function RepartidorPanel({ mode = "repartidor", todayOnly = true 
         <ChatModal
           orderId={chatOrderId}
           profile={profile}
+          customerPhone={orders.find((o) => o.id === chatOrderId)?.customer_phone || null}
           onClose={() => setChatOrderId(null)}
         />
       )}
@@ -270,6 +387,17 @@ function OrderCard({ order, profile, mode, busy, onClaim, onSetStatus, onOpenCha
   const [codeError, setCodeError] = useState("");
   const [showCodeInput, setShowCodeInput] = useState(false);
   const [deliverySuccess, setDeliverySuccess] = useState(false);
+  // Purchase form
+  const [showPurchaseForm, setShowPurchaseForm] = useState(false);
+  const [purchaseAmount, setPurchaseAmount] = useState("");
+  const [ticketFile, setTicketFile] = useState(null);
+  const [ticketPreview, setTicketPreview] = useState("");
+  const [savingPurchase, setSavingPurchase] = useState(false);
+  const [purchaseSaved, setPurchaseSaved] = useState(false);
+  const [platformFee, setPlatformFee] = useState(0);
+  const [feePaymentUrl, setFeePaymentUrl] = useState(null);
+
+  const sb = useMemo(() => getSupabase(), []);
 
   const isMine = order.repartidor_id === profile?.id;
   const isUnclaimed = !order.repartidor_id;
@@ -283,8 +411,9 @@ function OrderCard({ order, profile, mode, busy, onClaim, onSetStatus, onOpenCha
       setCodeError("");
       setCodeInput("");
     } else {
-      // No code set — confirm directly
-      onSetStatus("entregado");
+      setDeliverySuccess(true);
+      setShowPurchaseForm(true);
+      setTimeout(() => onSetStatus("entregado"), 1200);
     }
   };
 
@@ -292,11 +421,107 @@ function OrderCard({ order, profile, mode, busy, onClaim, onSetStatus, onOpenCha
     if (codeInput.trim() === String(order.delivery_code).trim()) {
       setCodeError("");
       setDeliverySuccess(true);
-      const commission = Number(order.driver_commission || 0);
+      setShowCodeInput(false);
+      setShowPurchaseForm(true);
       setTimeout(() => onSetStatus("entregado"), 1200);
     } else {
       setCodeError("Código incorrecto — pedíselo al cliente");
     }
+  };
+
+  const updatePurchaseAmount = (val) => {
+    setPurchaseAmount(val);
+    const num = parseFloat(val) || 0;
+    setPlatformFee(Math.round(num * 0.15));
+  };
+
+  const handleTicketFile = (e) => {
+    const file = e.currentTarget.files?.[0];
+    if (!file) return;
+    setTicketFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setTicketPreview(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const savePurchase = async () => {
+    if (!sb) return;
+    const amount = parseFloat(purchaseAmount);
+    if (!amount || amount <= 0) return;
+    setSavingPurchase(true);
+    try {
+      let ticketUrl = null;
+      if (ticketFile) {
+        const ext = ticketFile.name.split(".").pop();
+        const path = `tickets/${order.id}_${Date.now()}.${ext}`;
+        const { data: up, error: upErr } = await sb.storage.from("tickets").upload(path, ticketFile, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+        if (!upErr && up) {
+          const { data: pub } = sb.storage.from("tickets").getPublicUrl(path);
+          ticketUrl = pub?.publicUrl || null;
+        }
+      }
+      const fee = Math.round(amount * 0.15);
+      const { error } = await sb.from("orders").update({
+        purchase_amount: amount,
+        ticket_url: ticketUrl,
+        platform_fee: fee,
+        platform_fee_paid: false,
+        updated_by: profile?.id || null,
+      }).eq("id", order.id);
+      if (error) throw error;
+
+      // Link de MercadoPago para el 15%. El monto lo lee la función del pedido
+      // (platform_fee recién guardado), no se manda desde acá.
+      let feePaymentUrl = null;
+      try {
+        const fnUrl = `${import.meta.env.PUBLIC_SUPABASE_URL || "https://aiagaddxujtbyudriulh.supabase.co"}/functions/v1/create-platform-fee-payment`;
+        const resp = await fetch(fnUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: order.id }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          feePaymentUrl = data.paymentUrl;
+        }
+      } catch (e) {
+        console.error("Error generando link de fee:", e);
+      }
+      setFeePaymentUrl(feePaymentUrl);
+
+      setPurchaseSaved(true);
+      onSetStatus("entregado");
+    } catch (e) {
+      console.error("Error guardando compra:", e);
+    } finally {
+      setSavingPurchase(false);
+    }
+  };
+
+  const buildPurchaseWA = () => {
+    const amount = parseFloat(purchaseAmount) || 0;
+    const fee = Math.round(amount * 0.15);
+    const lines = [
+      `*RESUMEN DE COMPRA*`,
+      ``,
+      `Pedido: ${order.id?.slice(0, 8)}…`,
+      `Cliente: ${order.customer_name || "—"}`,
+      `Total gastado: $${amount.toLocaleString("es-AR")}`,
+      `Comisión plataforma (15%): $${fee.toLocaleString("es-AR")}`,
+      ``,
+      `Pagá los $${fee.toLocaleString("es-AR")} con:`,
+    ];
+    if (feePaymentUrl) {
+      lines.push(feePaymentUrl);
+    } else {
+      lines.push(`MercadoPago: alias mandadosahora`);
+    }
+    lines.push(``, `¡Gracias!`);
+    const WA_ADMIN = "5492271415182";
+    return `https://wa.me/${WA_ADMIN}?text=${encodeURIComponent(lines.join("\n"))}`;
   };
 
   const items = Array.isArray(order.items) ? order.items : [];
@@ -381,6 +606,17 @@ function OrderCard({ order, profile, mode, busy, onClaim, onSetStatus, onOpenCha
             <p style="font-size:0.72rem;font-weight:600;color:#1e40af;margin:0 0 0.25rem">Audio del cliente</p>
             <audio src={order.audio_url} controls preload="metadata" style="width:100%;height:32px" />
           </div>
+        </div>
+      )}
+
+      {/* Comprobante de pago */}
+      {order.payment_proof_url && (
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:0.5rem;padding:0.55rem 0.7rem;margin-bottom:0.6rem">
+          <p style="font-size:0.72rem;font-weight:600;color:#166534;margin:0 0 0.35rem">📎 Comprobante de transferencia</p>
+          <a href={order.payment_proof_url} target="_blank" rel="noopener"
+            style="display:inline-block;background:#fff;border:1px solid #d1d5db;border-radius:0.35rem;padding:0.3rem 0.6rem;font-size:0.75rem;color:#2563eb;text-decoration:none">
+            Ver comprobante
+          </a>
         </div>
       )}
 
@@ -490,13 +726,109 @@ function OrderCard({ order, profile, mode, busy, onClaim, onSetStatus, onOpenCha
         </div>
       )}
 
-      {/* Delivery success banner */}
+      {/* Delivery success + Purchase form */}
       {deliverySuccess && (
-        <div style="margin-top:0.5rem;background:#dcfce7;border:1px solid #86efac;border-radius:0.6rem;padding:0.65rem;text-align:center">
-          <p style="font-size:0.88rem;font-weight:700;color:#166534;margin:0">Entrega confirmada ✅</p>
-          <p style="font-size:0.78rem;color:#166534;margin:0.15rem 0 0">
-            Tu ganancia: ${Number(order.driver_commission || 0).toLocaleString("es-AR")}
-          </p>
+        <div style="margin-top:0.5rem">
+          <div style="background:#dcfce7;border:1px solid #86efac;border-radius:0.6rem;padding:0.65rem;text-align:center;margin-bottom:0.6rem">
+            <p style="font-size:0.88rem;font-weight:700;color:#166534;margin:0">Entrega confirmada ✅</p>
+            <p style="font-size:0.78rem;color:#166534;margin:0.15rem 0 0">
+              Tu ganancia: ${Number(order.driver_commission || 0).toLocaleString("es-AR")}
+            </p>
+          </div>
+
+          {/* Purchase form */}
+          {showPurchaseForm && !purchaseSaved && (
+            <div style="background:#fff;border:1px solid #e5e7eb;border-radius:0.6rem;padding:0.85rem">
+              <p style="font-size:0.82rem;font-weight:700;color:#1f2937;margin:0 0 0.6rem">
+                📋 Completá los datos de la compra
+              </p>
+              <p style="font-size:0.7rem;color:#6b7280;margin:0 0 0.6rem">
+                El 15% del total se cobrará al cliente como comisión de plataforma.
+              </p>
+
+              <label style="display:block;margin-bottom:0.5rem">
+                <span style="font-size:0.7rem;font-weight:600;color:#374151">Total gastado en el local</span>
+                <div style="margin-top:0.2rem;position:relative">
+                  <span style="position:absolute;left:0.55rem;top:50%;transform:translateY(-50%);color:#6b7280;font-weight:600">$</span>
+                  <input
+                    type="number"
+                    value={purchaseAmount}
+                    onInput={(e) => updatePurchaseAmount(e.currentTarget.value)}
+                    placeholder="Ej: 15500"
+                    min="0"
+                    style="width:100%;padding:0.5rem 0.65rem 0.5rem 1.3rem;border:1px solid #d1d5db;border-radius:0.5rem;outline:none;font-size:0.85rem;box-sizing:border-box"
+                    onFocus={(e) => { e.currentTarget.style.borderColor = "#377DEC"; }}
+                    onBlur={(e) => { e.currentTarget.style.borderColor = "#d1d5db"; }}
+                  />
+                </div>
+              </label>
+
+              {platformFee > 0 && (
+                <div style="background:#EBF3FF;border:1px solid #BFD7FF;border-radius:0.5rem;padding:0.5rem 0.65rem;margin-bottom:0.5rem;display:flex;justify-content:space-between;align-items:center">
+                  <span style="font-size:0.75rem;font-weight:600;color:#1e40af">15% comisión:</span>
+                  <span style="font-size:0.9rem;font-weight:700;color:#377DEC">${platformFee.toLocaleString("es-AR")}</span>
+                </div>
+              )}
+
+              <label style="display:block;margin-bottom:0.5rem">
+                <span style="font-size:0.7rem;font-weight:600;color:#374151">Foto del ticket</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleTicketFile}
+                  style="margin-top:0.2rem;width:100%;font-size:0.78rem"
+                />
+              </label>
+
+              {ticketPreview && (
+                <div style="margin-bottom:0.5rem">
+                  <img src={ticketPreview} alt="Ticket" style="width:100%;max-height:200px;object-fit:contain;border-radius:0.5rem;border:1px solid #e5e7eb" />
+                </div>
+              )}
+
+              <div style="display:flex;gap:0.4rem">
+                <button
+                  onClick={savePurchase}
+                  disabled={savingPurchase || !purchaseAmount || parseFloat(purchaseAmount) <= 0}
+                  style={`flex:1;padding:0.55rem;border-radius:0.5rem;border:none;font-weight:600;font-size:0.82rem;cursor:${savingPurchase || !purchaseAmount ? "not-allowed" : "pointer"};background:${savingPurchase ? "#cbd5e1" : "#16a34a"};color:#fff`}
+                >
+                  {savingPurchase ? "Guardando..." : "💾 Guardar y calcular 15%"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {purchaseSaved && (
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:0.6rem;padding:0.75rem">
+              <p style="font-size:0.85rem;font-weight:700;color:#166534;margin:0 0 0.35rem">
+                Datos guardados ✅
+              </p>
+              <div style="font-size:0.78rem;color:#374151;display:flex;flex-direction:column;gap:0.15rem;margin-bottom:0.5rem">
+                <span>Total compra: <b>${
+                  (parseFloat(purchaseAmount) || 0).toLocaleString("es-AR")}</b></span>
+                <span>15% a cobrar: <b style="color:#377DEC">${
+                  (Math.round((parseFloat(purchaseAmount) || 0) * 0.15)).toLocaleString("es-AR")}</b></span>
+              </div>
+              {feePaymentUrl && (
+                <div style="background:#fff;border:1px solid #d1d5db;border-radius:0.5rem;padding:0.5rem;margin-bottom:0.5rem">
+                  <p style="font-size:0.7rem;font-weight:600;color:#6b7280;margin:0 0 0.35rem">Link de pago para el cliente:</p>
+                  <input type="text" value={feePaymentUrl} readonly
+                    onClick={(e) => e.currentTarget.select()}
+                    style="width:100%;font-size:0.68rem;padding:0.3rem 0.4rem;border:1px solid #e5e7eb;border-radius:0.3rem;background:#f9fafb;outline:none;box-sizing:border-box" />
+                </div>
+              )}
+              <div style="display:flex;gap:0.4rem">
+                <a
+                  href={buildPurchaseWA()}
+                  target="_blank"
+                  rel="noopener"
+                  style="flex:1;display:flex;align-items:center;justify-content:center;gap:0.35rem;background:#25D366;color:#fff;text-decoration:none;padding:0.5rem;border-radius:0.5rem;font-size:0.78rem;font-weight:600"
+                >
+                  Enviar por WhatsApp
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -593,7 +925,7 @@ function AdminMenu({ order, busy, onSetStatus, onAssign }) {
 // ============================================================
 // ChatModal
 // ============================================================
-function ChatModal({ orderId, profile, onClose }) {
+function ChatModal({ orderId, profile, customerPhone, onClose }) {
   const [messages, setMessages] = useState([]);
   const [senderProfiles, setSenderProfiles] = useState({});
   const [input, setInput] = useState("");
@@ -691,6 +1023,20 @@ function ChatModal({ orderId, profile, onClose }) {
       });
       if (error) throw error;
       setInput("");
+      // Notificar al cliente por WhatsApp si tiene teléfono
+      if (customerPhone) {
+        const clean = customerPhone.replace(/^\+?54\s*/, "").replace(/\D/g, "");
+        fetch(`${import.meta.env.PUBLIC_SUPABASE_URL || "https://aiagaddxujtbyudriulh.supabase.co"}/functions/v1/whatsapp-send`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: clean.startsWith("549") ? clean : "549" + clean,
+            orderId,
+            status: "chat_message",
+            trackingUrl: `${window.location.origin}/pedido?id=${orderId}`,
+          }),
+        }).catch(() => {});
+      }
     } catch (e) {
       setErr(e.message);
     } finally {

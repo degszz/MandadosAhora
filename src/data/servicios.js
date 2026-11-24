@@ -17,4 +17,5 @@ export const SERVICIOS = [
   // Fila 4
   { servicio: "Dietética", slug: "dietetica", imagen: "/dietetica.avif", alt: "Dietetica", gradient: "bg-gradient-to-br from-[#D9945D] via-[#D9945D] to-[#F0D39F]", titulo: "Dietetica" },
   { servicio: "Ferretería", slug: "ferreteria", imagen: "/ferreteria.avif", alt: "Ferreteria", gradient: "bg-gradient-to-br from-[#626262] via-[#626262] to-[#626262]", titulo: "Ferreteria" },
+  { servicio: "Pollería", slug: "polleria", imagen: "/chicken.avif", alt: "Pollería", gradient: "bg-gradient-to-br from-[#e8a440] via-[#f0c05a] to-[#d4922a]", titulo: "Pollería" },
 ];

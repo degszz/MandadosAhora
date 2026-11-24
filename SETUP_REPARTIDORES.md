@@ -133,7 +133,7 @@ Schema `mandados`:
 | `/repartidor/espera`      | sesión, no verified                    | "Pendiente de aprobación" + realtime para auto-redirect |
 | `/repartidor/panel`       | sesión + verified + role=repartidor    | Lista de pedidos + chat realtime |
 | `/auth/callback`          | redirect de Google OAuth               | Canjea código y enruta por rol |
-| `/admin`                  | admin Google **o** password `MAfinomax`| Login dual + tabs: Repartidores / Pedidos Supabase / Pedidos legacy |
+| `/admin`                  | solo admin con Google                  | Tabs: Repartidores / Pedidos / Horarios / Resumen / Pagos / Comida |
 
 ---
 
@@ -145,7 +145,7 @@ Schema `mandados`:
 - ✅ `src/components/CustomerTracker.jsx` — seguimiento de pedido del cliente con realtime
 - ✅ `src/pages/repartidor/index.astro`, `espera.astro`, `panel.astro`
 - ✅ `src/pages/auth/callback.astro`
-- ✅ `src/pages/admin.astro` — login dual (Google + password). Flujo password MAfinomax intacto
+- ✅ `src/pages/admin.astro` — login solo con Google (se eliminó el acceso por contraseña)
 - ✅ `src/pages/checkout.astro` — inserta también en `mandados.orders` (fire-and-forget, no rompe WhatsApp)
 - ✅ `src/pages/index.astro` — badge online/offline consultando settings/schedules de Supabase
 - ✅ `src/components/Footer.astro` — link visible "🛵 Soy repartidor"
@@ -156,7 +156,6 @@ Schema `mandados`:
 - `src/components/CartDrawer.astro`
 - Formularios de servicios (`src/pages/servicios/[slug].astro`)
 - Flujo WhatsApp del checkout (sigue 100% igual)
-- Login con `MAfinomax`
 
 ---
 

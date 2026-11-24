@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from "preact/hooks";
 import { getSupabase, getMyProfile, signOut } from "../scripts/supabase.js";
 import RepartidorPanel from "./RepartidorPanel.jsx";
+import LocalesAdmin from "./LocalesAdmin.jsx";
 
 /**
  * Panel admin (modo Google OAuth).
@@ -17,7 +18,9 @@ export default function AdminPanel() {
   const [tab, setTab] = useState("repartidores");
   const [hiringActive, setHiringActive] = useState(false);
   const [hiringLoading, setHiringLoading] = useState(false);
-  const PRICE_PER_SERVICE = 3000;
+  const [hiringMsg, setHiringMsg] = useState(null);
+  const SERVICE_FEE_ONLINE = 2500;
+  const SERVICE_FEE_OFFLINE = 3500;
   const sb = useMemo(() => getSupabase(), []);
 
   useEffect(() => {
@@ -43,9 +46,18 @@ export default function AdminPanel() {
       }
       setProfile(p);
       setLoading(false);
-      // Leer setting de hiring
+      // Leer setting de hiring: localStorage primero (funciona siempre), Supabase como source of truth
+      const localHiring = localStorage.getItem("mandados_hiring_active");
+      if (localHiring === null) localStorage.setItem("mandados_hiring_active", "false");
+      if (localHiring !== null) setHiringActive(localHiring === "true");
       sb.from("settings").select("value").eq("key", "hiring_active").single()
-        .then(({ data }) => { if (data) setHiringActive(data.value === true); });
+        .then(({ data, error }) => {
+          if (!error && data) {
+            const v = data.value === true;
+            setHiringActive(v);
+            localStorage.setItem("mandados_hiring_active", String(v));
+          }
+        });
     })();
     return () => { cancelled = true; };
   }, [sb]);
@@ -58,9 +70,20 @@ export default function AdminPanel() {
   const toggleHiring = async () => {
     if (!sb || hiringLoading) return;
     setHiringLoading(true);
+    setHiringMsg(null);
     const newVal = !hiringActive;
-    const { error: e } = await sb.from("settings").update({ value: newVal, updated_at: new Date().toISOString() }).eq("key", "hiring_active");
-    if (!e) setHiringActive(newVal);
+    // localStorage: siempre guarda (funciona aunque Supabase falle)
+    localStorage.setItem("mandados_hiring_active", String(newVal));
+    setHiringActive(newVal);
+    setHiringMsg(newVal ? "Repartidores activados" : "Repartidores desactivados");
+    setTimeout(() => setHiringMsg(null), 2500);
+    // Supabase: intentar persistir en backend (mejor esfuerzo)
+    const payload = { value: newVal, updated_at: new Date().toISOString() };
+    const { data: updated, error: updateErr } = await sb.from("settings")
+      .update(payload).eq("key", "hiring_active").select("key");
+    if (!updateErr && (!updated || updated.length === 0)) {
+      await sb.from("settings").insert({ key: "hiring_active", ...payload });
+    }
     setHiringLoading(false);
   };
 
@@ -110,6 +133,9 @@ export default function AdminPanel() {
             </span>
             🛵 {hiringActive ? "Buscando repartidores" : "Repartidores desactivado"}
           </button>
+          {hiringMsg && (
+            <span style="font-size:0.72rem;color:#16a34a;font-weight:500;white-space:nowrap">{hiringMsg}</span>
+          )}
 
           <button
             onClick={logout}
@@ -130,7 +156,8 @@ export default function AdminPanel() {
           { id: "pedidos",      label: "📦 Pedidos" },
           { id: "horarios",     label: "🕐 Horarios" },
           { id: "resumen",      label: "💰 Resumen" },
-          { id: "legacy",       label: "🗂 Legacy" },
+          { id: "pagos",        label: "💳 Pagos" },
+          { id: "comida",       label: "🍔 Comida" },
         ].map((t) => {
           const active = tab === t.id;
           return (
@@ -149,7 +176,8 @@ export default function AdminPanel() {
       {tab === "pedidos" && <RepartidorPanel mode="admin" todayOnly={false} />}
       {tab === "horarios" && <HorariosPanel />}
       {tab === "resumen" && <ResumenDiario />}
-      {tab === "legacy" && <LegacyTab />}
+      {tab === "pagos" && <PagosPanel />}
+      {tab === "comida" && <LocalesAdmin />}
     </div>
   );
 }
@@ -173,26 +201,38 @@ function BusinessStatusControl() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
   const sb = useMemo(() => getSupabase(), []);
 
   useEffect(() => {
     if (!sb) return;
+    // Leer localStorage primero (funciona aunque Supabase falle)
+    const localOpen = localStorage.getItem("mandados_business_open");
+    if (localOpen !== null) setOpen(localOpen === "true");
+    const localSched = localStorage.getItem("mandados_business_schedule");
+    if (localSched !== null) { try { setSchedule(JSON.parse(localSched)); } catch {} }
+    // Supabase como source of truth (mejor esfuerzo)
     sb.from("settings").select("key,value").in("key", ["business_open", "business_schedule"])
       .then(({ data }) => {
         if (data) data.forEach((r) => {
-          if (r.key === "business_open") setOpen(r.value === true);
-          if (r.key === "business_schedule") setSchedule(r.value);
+          if (r.key === "business_open") { setOpen(r.value === true); localStorage.setItem("mandados_business_open", String(r.value === true)); }
+          if (r.key === "business_schedule") { setSchedule(r.value); localStorage.setItem("mandados_business_schedule", JSON.stringify(r.value)); }
         });
         setLoading(false);
-      });
+      }).catch(() => setLoading(false));
   }, [sb]);
 
   const toggleOpen = async () => {
     if (!sb || saving) return;
     setSaving(true);
     const newVal = !open;
-    await sb.from("settings").update({ value: newVal, updated_at: new Date().toISOString() }).eq("key", "business_open");
+    localStorage.setItem("mandados_business_open", String(newVal));
     setOpen(newVal);
+    try {
+      await sb.from("settings").update({ value: newVal, updated_at: new Date().toISOString() }).eq("key", "business_open");
+    } catch (e) {
+      console.error("[toggleOpen]", e);
+    }
     setSaving(false);
   };
 
@@ -223,7 +263,17 @@ function BusinessStatusControl() {
   const saveSchedule = async () => {
     if (!sb) return;
     setSaving(true);
-    await sb.from("settings").update({ value: schedule, updated_at: new Date().toISOString() }).eq("key", "business_schedule");
+    setMsg(null);
+    try {
+      localStorage.setItem("mandados_business_schedule", JSON.stringify(schedule));
+      const { error } = await sb.from("settings").update({ value: schedule, updated_at: new Date().toISOString() }).eq("key", "business_schedule");
+      if (error) throw error;
+      setMsg("Horario guardado");
+      setTimeout(() => setMsg(null), 2500);
+    } catch (e) {
+      console.error("[saveSchedule]", e);
+      setMsg("Error al guardar: " + (e?.message || "desconocido"));
+    }
     setSaving(false);
   };
 
@@ -304,7 +354,10 @@ function BusinessStatusControl() {
               );
             })}
           </div>
-          <div style="margin-top:0.65rem;display:flex;justify-content:flex-end">
+          <div style="margin-top:0.65rem;display:flex;align-items:center;justify-content:flex-end;gap:0.75rem">
+            {msg && (
+              <span style={`font-size:0.75rem;font-weight:500;color:${msg.startsWith("Error") ? "#b91c1c" : "#16a34a"};white-space:nowrap`}>{msg}</span>
+            )}
             <button
               onClick={saveSchedule}
               disabled={saving}
@@ -494,23 +547,6 @@ function RepCard({ rep, busy, actions }) {
   );
 }
 
-function LegacyTab() {
-  return (
-    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:1rem;padding:1.5rem;text-align:center">
-      <p style="font-size:0.95rem;font-weight:600;color:#1f2937;margin-bottom:0.25rem">
-        📂 Panel legacy (localStorage)
-      </p>
-      <p style="color:#6b7280;font-size:0.85rem;margin-bottom:1rem">
-        Acceso a los pedidos creados antes de Supabase.
-        Contraseña: <code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:0.75rem">MAfinomax</code>.
-      </p>
-      <a href="/admin?legacy=1" style="display:inline-block;background:#377DEC;color:#fff;padding:0.55rem 1.2rem;border-radius:0.5rem;font-weight:600;text-decoration:none;font-size:0.85rem">
-        Abrir panel legacy
-      </a>
-    </div>
-  );
-}
-
 // ============================================================
 // HorariosPanel
 // ============================================================
@@ -668,8 +704,8 @@ function ResumenDiario() {
   const fetchForRange = useCallback(async (rangeStart, rangeEnd) => {
     if (!sb) return;
     setLoading(true);
-    const { data } = await sb.from("orders")
-      .select("id, status, total_amount, driver_commission, services_count, payment_method, payment_status, payment_provider, created_at, customer_name")
+      const { data } = await sb.from("orders")
+      .select("id, status, total_amount, driver_commission, platform_fee, services_count, payment_method, payment_status, payment_provider, created_at, customer_name")
       .gte("created_at", rangeStart.toISOString())
       .lte("created_at", rangeEnd.toISOString())
       .order("created_at", { ascending: false });
@@ -720,6 +756,7 @@ function ResumenDiario() {
 
   const totalRevenue = orders.reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
   const totalCommissions = orders.reduce((s, o) => s + (Number(o.driver_commission) || 0), 0);
+  const totalPlatformFee = orders.reduce((s, o) => s + (Number(o.platform_fee) || 0), 0);
   const delivered = orders.filter((o) => o.status === "entregado").length;
   const pending = orders.filter((o) => !["entregado","cancelado"].includes(o.status)).length;
   const fmt = (n) => "$" + Number(n).toLocaleString("es-AR");
@@ -775,7 +812,8 @@ function ResumenDiario() {
           { label: "Pendientes", value: pending, color: "#f59e0b" },
           { label: "Facturado", value: fmt(totalRevenue), color: "#1f2937" },
           { label: "Comisiones", value: fmt(totalCommissions), color: "#7c3aed" },
-          { label: "Neto", value: fmt(totalRevenue - totalCommissions), color: "#0ea5e9" },
+          { label: "Fee plataforma", value: fmt(totalPlatformFee), color: "#0ea5e9" },
+          { label: "Neto", value: fmt(totalRevenue - totalCommissions - totalPlatformFee), color: "#10b981" },
         ].map((s) => (
           <div key={s.label} style="background:#fff;border:1px solid #e5e7eb;border-radius:0.75rem;padding:0.75rem;text-align:center">
             <p style={`font-size:1.25rem;font-weight:800;color:${s.color};margin:0`}>{s.value}</p>
@@ -802,11 +840,154 @@ function ResumenDiario() {
               <div style="text-align:right">
                 <p style="font-size:0.88rem;font-weight:700;color:#1f2937;margin:0">{fmt(o.total_amount || 0)}</p>
                 <p style="font-size:0.68rem;color:#7c3aed;margin:0">Comisión: {fmt(o.driver_commission || 0)}</p>
+                {Number(o.platform_fee) > 0 && (
+                  <p style="font-size:0.65rem;color:#0ea5e9;margin:0">Fee 15%: {fmt(o.platform_fee)}</p>
+                )}
                 {o.payment_provider && (
                   <p style="font-size:0.65rem;color:#6b7280;margin:0">
                     {o.payment_provider === "stripe" ? "💳 Tarjeta" : o.payment_provider === "mercadopago" ? "🏦 MP" : o.payment_provider}
                     {o.payment_status === "pagado" ? " ✓" : ""}
                   </p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// PagosPanel — gestionar service fee + fee plataforma + repartidor
+// ============================================================
+function PagosPanel() {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(null);
+  const [filter, setFilter] = useState("pendientes");
+  const sb = useMemo(() => getSupabase(), []);
+
+  const fetchOrders = useCallback(async () => {
+    if (!sb) return;
+    const { data } = await sb.from("orders")
+      .select("id, customer_name, payment_method, payment_status, total_amount, driver_commission, platform_fee, platform_fee_paid, paid_to_repartidor, status, created_at")
+      .neq("status", "cancelado")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    setOrders(data || []);
+    setLoading(false);
+  }, [sb]);
+
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+  const togglePlatformFee = async (id, current) => {
+    if (!sb || busy) return;
+    setBusy(id);
+    try {
+      const { error } = await sb.from("orders").update({ platform_fee_paid: !current }).eq("id", id);
+      if (error) throw error;
+      await fetchOrders();
+    } catch (e) { console.error(e); }
+    setBusy(null);
+  };
+
+  const toggleRepartidorPaid = async (id, current) => {
+    if (!sb || busy) return;
+    setBusy(id);
+    try {
+      const { error } = await sb.from("orders").update({ paid_to_repartidor: !current }).eq("id", id);
+      if (error) throw error;
+      await fetchOrders();
+    } catch (e) { console.error(e); }
+    setBusy(null);
+  };
+
+  const fmt = (n) => "$" + Number(n || 0).toLocaleString("es-AR");
+  const metodoLabel = (m) => ({ stripe: "Tarjeta", mercadopago: "MercadoPago", efectivo: "Efectivo" })[m] || m;
+
+  const filtered = orders.filter((o) => {
+    if (filter === "pendientes") return o.payment_status !== "pagado";
+    if (filter === "pagados") return o.payment_status === "pagado";
+    if (filter === "fee_pendiente") return Number(o.platform_fee) > 0 && !o.platform_fee_paid;
+    if (filter === "repartidor_pendiente") return !o.paid_to_repartidor && o.status === "entregado";
+    return true;
+  });
+
+  const totalPendiente = orders.filter((o) => o.payment_status !== "pagado").reduce((s, o) => s + (Number(o.total_amount) || 0), 0);
+  const totalFeePendiente = orders.filter((o) => Number(o.platform_fee) > 0 && !o.platform_fee_paid).reduce((s, o) => s + (Number(o.platform_fee) || 0), 0);
+  const totalRepartidorPendiente = orders.filter((o) => !o.paid_to_repartidor && o.status === "entregado").reduce((s, o) => s + (Number(o.driver_commission) || 0), 0);
+
+  if (loading) return <p style="color:#6b7280;font-size:0.875rem;padding:1rem">Cargando pagos...</p>;
+
+  return (
+    <div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.6rem;margin-bottom:1.25rem">
+        <div style="background:#fff;border:1px solid #fde68a;border-radius:0.75rem;padding:0.75rem;text-align:center">
+          <p style="font-size:1.2rem;font-weight:800;color:#f59e0b;margin:0">{fmt(totalPendiente)}</p>
+          <p style="font-size:0.72rem;color:#6b7280;margin:0.15rem 0 0">Service fee pendiente</p>
+        </div>
+        <div style="background:#fff;border:1px solid #bae6fd;border-radius:0.75rem;padding:0.75rem;text-align:center">
+          <p style="font-size:1.2rem;font-weight:800;color:#0ea5e9;margin:0">{fmt(totalFeePendiente)}</p>
+          <p style="font-size:0.72rem;color:#6b7280;margin:0.15rem 0 0">Fee plataforma pendiente</p>
+        </div>
+        <div style="background:#fff;border:1px solid #ddd6fe;border-radius:0.75rem;padding:0.75rem;text-align:center">
+          <p style="font-size:1.2rem;font-weight:800;color:#7c3aed;margin:0">{fmt(totalRepartidorPendiente)}</p>
+          <p style="font-size:0.72rem;color:#6b7280;margin:0.15rem 0 0">A repartidores</p>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:0.4rem;margin-bottom:1rem;flex-wrap:wrap">
+        {[
+          { id: "todos", label: "Todos" },
+          { id: "pendientes", label: "Pago pendiente" },
+          { id: "pagados", label: "Pagados" },
+          { id: "fee_pendiente", label: "Fee 15% pendiente" },
+          { id: "repartidor_pendiente", label: "Repartidor sin cobrar" },
+        ].map((f) => (
+          <button key={f.id} onClick={() => setFilter(f.id)}
+            style={`font-size:0.75rem;padding:0.3rem 0.65rem;border-radius:0.4rem;border:1px solid;cursor:pointer;${filter === f.id ? "background:#377DEC;color:#fff;border-color:#377DEC" : "background:#fff;color:#4b5563;border-color:#e5e7eb"}`}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:0.75rem;padding:1.25rem;text-align:center;color:#9ca3af;font-size:0.85rem">
+          No hay pagos en esta categoría.
+        </div>
+      ) : (
+        <div style="display:flex;flex-direction:column;gap:0.5rem">
+          {filtered.map((o) => (
+            <div key={o.id} style="background:#fff;border:1px solid #e5e7eb;border-radius:0.75rem;padding:0.65rem 0.875rem">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem">
+                <div>
+                  <p style="font-size:0.82rem;font-weight:600;color:#1f2937;margin:0">{o.customer_name || "Sin nombre"}</p>
+                  <p style="font-size:0.7rem;color:#9ca3af;margin:0">
+                    {new Date(o.created_at).toLocaleDateString("es-AR")} · {metodoLabel(o.payment_method)}
+                    {" · "}
+                    <span style={o.payment_status === "pagado" ? "color:#16a34a;font-weight:600" : "color:#f59e0b;font-weight:600"}>
+                      {o.payment_status === "pagado" ? "Pagado ✓" : "Pendiente"}
+                    </span>
+                  </p>
+                </div>
+                <div style="text-align:right">
+                  <p style="font-size:0.88rem;font-weight:700;margin:0">{fmt(o.total_amount)}</p>
+                  {Number(o.platform_fee) > 0 && <p style="font-size:0.68rem;color:#0ea5e9;margin:0">Fee: {fmt(o.platform_fee)}</p>}
+                </div>
+              </div>
+              <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+                {Number(o.platform_fee) > 0 && (
+                  <button onClick={() => togglePlatformFee(o.id, o.platform_fee_paid)} disabled={busy === o.id}
+                    style={`font-size:0.72rem;font-weight:600;padding:0.3rem 0.6rem;border-radius:0.4rem;cursor:pointer;border:1px solid;${o.platform_fee_paid ? "background:#dcfce7;color:#166534;border-color:#bbf7d0" : "background:#fff;color:#0ea5e9;border-color:#bae6fd"}`}>
+                    {o.platform_fee_paid ? "✓ Fee cobrado" : "Marcar fee cobrado"}
+                  </button>
+                )}
+                {o.status === "entregado" && (
+                  <button onClick={() => toggleRepartidorPaid(o.id, o.paid_to_repartidor)} disabled={busy === o.id}
+                    style={`font-size:0.72rem;font-weight:600;padding:0.3rem 0.6rem;border-radius:0.4rem;cursor:pointer;border:1px solid;${o.paid_to_repartidor ? "background:#dcfce7;color:#166534;border-color:#bbf7d0" : "background:#fff;color:#7c3aed;border-color:#ddd6fe"}`}>
+                    {o.paid_to_repartidor ? "✓ Repartidor pagado" : "Marcar repartidor pagado"}
+                  </button>
                 )}
               </div>
             </div>

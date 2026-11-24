@@ -35,6 +35,7 @@ export async function createOrder(data) {
 
   const payload = {
     customer_name: data.nombre || null,
+    customer_phone: data.telefono || null,
     items,
     address: data.ubicacion?.direccion || "",
     address_type: data.ubicacion?.tipo || "manual",
@@ -48,15 +49,19 @@ export async function createOrder(data) {
     driver_commission: data.driverCommission ?? null,
     services_count: items.length,
     delivery_code: data.deliveryCode || null,
+    // Nuevos campos para el modelo post-entrega
+    purchase_amount: null,
+    ticket_url: null,
+    platform_fee: null,
+    platform_fee_paid: false,
   };
 
-  const { data: order, error } = await sb
-    .from("orders")
-    .insert(payload)
-    .select("*")
-    .single();
-
+  // El ID se genera acá: el cliente anónimo puede crear pedidos pero no
+  // leerlos (ver migración 013), así que no se puede pedir la fila de vuelta.
+  const id = crypto.randomUUID();
+  const { error } = await sb.from("orders").insert({ id, ...payload });
   if (error) throw error;
+  const order = { id, ...payload, created_at: new Date().toISOString() };
 
   try {
     const stored = JSON.parse(localStorage.getItem("mandados_my_orders") || "[]");
@@ -83,20 +88,16 @@ export async function getOrders() {
   return data || [];
 }
 
-/** Obtener un pedido por ID (público, vía RLS anon_read_order_by_id). */
+/** Obtener un pedido por ID exacto (público, vía función get_order). */
 export async function getOrderById(id) {
   const sb = getSupabase();
   if (!sb) return null;
-  const { data, error } = await sb
-    .from("orders")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const { data, error } = await sb.rpc("get_order", { p_id: id });
   if (error) {
     console.error("[orders] getOrderById error:", error);
     return null;
   }
-  return data;
+  return (data && data[0]) || null;
 }
 
 /**
@@ -114,6 +115,11 @@ export async function updateOrder(id, updates) {
   if (updates.paid_at != null) payload.paid_at = updates.paid_at;
   if (updates.completed_at != null) payload.completed_at = updates.completed_at;
   if (updates.cancelled_at != null) payload.cancelled_at = updates.cancelled_at;
+  // Nuevos campos post-entrega
+  if (updates.purchase_amount != null) payload.purchase_amount = updates.purchase_amount;
+  if (updates.ticket_url != null) payload.ticket_url = updates.ticket_url;
+  if (updates.platform_fee != null) payload.platform_fee = updates.platform_fee;
+  if (updates.platform_fee_paid != null) payload.platform_fee_paid = updates.platform_fee_paid;
 
   const { data, error } = await sb
     .from("orders")
@@ -127,6 +133,27 @@ export async function updateOrder(id, updates) {
     return null;
   }
   return data;
+}
+
+/**
+ * Guarda el monto de compra y ticket después de la entrega.
+ * Calcula automáticamente el 15% de platform fee.
+ */
+export async function savePurchaseData(id, purchaseAmount, ticketUrl) {
+  const fee = Math.round(purchaseAmount * 0.15);
+  return updateOrder(id, {
+    purchase_amount: purchaseAmount,
+    ticket_url: ticketUrl,
+    platform_fee: fee,
+    platform_fee_paid: false,
+  });
+}
+
+/**
+ * Marca el platform fee como pagado.
+ */
+export async function markPlatformFeePaid(id) {
+  return updateOrder(id, { platform_fee_paid: true });
 }
 
 /** Marcar pago como pagado. */

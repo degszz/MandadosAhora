@@ -4,6 +4,7 @@ import "../styles/global.css";
 import Carouselchill from "../components/Carouselchill.astro";
 import AudioRecorder from "../components/AudioRecorder.jsx";
 import ServiceCard from "../components/ServiceCard.astro";
+import PedidoRapido from "../components/PedidoRapido.astro";
 import Footer from "../components/Footer.astro";
 import { SERVICIOS } from "../data/servicios.js";
 
@@ -42,7 +43,7 @@ const ORBITAL = ORBITAL_SLUGS
 					</span>
 
 					<h1
-						class="text-3xl md:text-6xl lg:text-7xl font-extrabold leading-[1.05] tracking-tight animate-fade-in-up animate-delay-200 animate-duration-slow"
+						class="text-3xl md:text-2xl lg:text-2xl font-extrabold leading-[1.05] tracking-tight animate-fade-in-up animate-delay-200 animate-duration-slow"
 						style="font-family: 'Inter', system-ui, sans-serif;"
 					>
 						<span class="block text-[#0b0e14]"
@@ -58,6 +59,8 @@ const ORBITAL = ORBITAL_SLUGS
 						desde casa y te lo llevamos a la puerta.
 						<b class="text-gray-800">Sin vueltas.</b>
 					</p>
+
+					<PedidoRapido />
 
 					<div
 						class="flex flex-row justify-center sm:justify-start w-full max-w-xs mx-auto sm:mx-0 sm:max-w-md animate-fade-in-up animate-delay-600 animate-duration-slow gap-2"
@@ -83,7 +86,7 @@ const ORBITAL = ORBITAL_SLUGS
 							Empezar pedido
 						</a>
 						<a
-							href="https://wa.me/2271415182"
+							href="https://wa.me/5492271415182"
 							target="_blank"
 							rel="noopener"
 							class="inline-flex items-center justify-center gap-2 bg-white hover:bg-gray-50 border border-gray-300 text-gray-800 font-semibold px-4 py-2.5 rounded-xl shadow transition-all duration-200 hover:scale-[1.02] active:scale-95 text-sm"
@@ -242,6 +245,18 @@ const ORBITAL = ORBITAL_SLUGS
 				</a>
 			</div>
 		</div>
+
+		<!-- Acceso al directorio de comida -->
+		<a href="/comida" style="display:block;max-width:1100px;width:100%;margin:1.5rem auto 0;padding:0 0.75rem;text-decoration:none">
+			<div style="background:linear-gradient(135deg,#fff7ed 0%,#ffedd5 100%);border:1.5px solid #fed7aa;border-radius:1rem;padding:1rem 1.25rem;display:flex;align-items:center;gap:0.9rem">
+				<div style="font-size:2rem;flex-shrink:0">🍔</div>
+				<div style="flex:1;min-width:0">
+					<p style="color:#7c2d12;font-size:1.05rem;font-weight:800;margin:0;font-family:'Poppins',sans-serif">¿No sabés qué comer?</p>
+					<p style="color:#9a3412;font-size:0.82rem;margin:0.15rem 0 0">Mirá todos los locales de comida de Monte y pediles directo.</p>
+				</div>
+				<span style="background:#ea580c;color:#fff;font-weight:700;font-size:0.82rem;padding:0.55rem 1rem;border-radius:0.75rem;white-space:nowrap;flex-shrink:0">Ver locales →</span>
+			</div>
+		</a>
 
 		<div class="flex flex-col justify-center mt-9 items-center w-full px-3">
 			<div class="text-center mb-8 md:mb-10 px-4 max-w-[1100px] w-full">
@@ -795,6 +810,7 @@ const ORBITAL = ORBITAL_SLUGS
         });
 
         var online = isBusinessOnline(businessOpen, businessSchedule);
+        try { if (settingsRes.ok) localStorage.setItem("mandados_business_status_v1", JSON.stringify({ online: online, at: Date.now() })); } catch (e) {}
         updateHeroBadge(online);
         update24hBanner(online);
         applyServiceCards(schedules, online);

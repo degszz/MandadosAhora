@@ -126,6 +126,7 @@
 
 <script>
   import { getItems, removeItem, updateItem, clear, subscribe } from "../scripts/cart.js";
+  import { isOfflineNow } from "../scripts/business.js";
   import { SERVICIOS } from "../data/servicios.js";
 
   const toggle = document.getElementById("cart-toggle");
@@ -180,20 +181,15 @@
   function renderItems() {
     const items = getItems();
 
-    const PRICE_REGULAR = 3000;
-    const PRICE_24H_OFFHOURS = 3500;
+    const SERVICE_FEE_ONLINE = 2500;
+    const SERVICE_FEE_OFFLINE = 3500;
 
-    function is24hOffHours() {
-      const now = new Date();
-      const h = now.getHours();
-      const day = now.getDay(); // 0=dom
-      // Fuera de horario laboral: antes de 8, después de 21, o domingo
-      return h < 8 || h >= 21 || day === 0;
-    }
+    // Fuera de horario: estado real del negocio (ver src/scripts/business.js)
+    const is24hOffHours = isOfflineNow;
 
-    function priceFor(item) {
-      if (item.slug === "24horas" && is24hOffHours()) return PRICE_24H_OFFHOURS;
-      return PRICE_REGULAR;
+    function serviceFeeFor(item) {
+      if (item.slug === "24horas" && is24hOffHours()) return SERVICE_FEE_OFFLINE;
+      return SERVICE_FEE_ONLINE;
     }
 
     // Badge
@@ -207,12 +203,12 @@
     // Footer + price summary
     footer.style.display = items.length > 0 ? "" : "none";
     if (items.length > 0) {
-      const total = items.reduce((sum, it) => sum + priceFor(it), 0);
+      const total = items.reduce((sum, it) => sum + serviceFeeFor(it), 0);
       const fmt = (n) => "$" + n.toLocaleString("es-AR");
       const has24h = items.some(it => it.slug === "24horas" && is24hOffHours());
       const detail = has24h
         ? `${items.length} servicio${items.length > 1 ? "s" : ""} (incluye 24hs nocturno)`
-        : `${items.length} servicio${items.length > 1 ? "s" : ""} × ${fmt(PRICE_REGULAR)}`;
+        : `${items.length} servicio${items.length > 1 ? "s" : ""} × ${fmt(SERVICE_FEE_ONLINE)}`;
       document.getElementById("cart-price-detail").textContent = detail;
       document.getElementById("cart-subtotal").textContent = fmt(total);
       document.getElementById("cart-total").textContent = fmt(total);
@@ -257,7 +253,7 @@
             ${avatar}
             <div class="min-w-0">
               <p style="font-weight:600;color:#1f2937;font-size:0.875rem" class="truncate">${escapeHtml(item.servicio)}</p>
-              <p style="font-size:0.75rem;color:${priceFor(item) > 3000 ? '#d97706' : '#377DEC'};font-weight:600">$${priceFor(item).toLocaleString("es-AR")}</p>
+              <p style="font-size:0.75rem;color:${serviceFeeFor(item) > 2500 ? '#d97706' : '#377DEC'};font-weight:600">$${serviceFeeFor(item).toLocaleString("es-AR")}</p>
             </div>
           </div>
           <button

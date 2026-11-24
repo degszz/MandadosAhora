@@ -1,7 +1,7 @@
 const STORAGE_KEY = "mandados_cart_v1";
 const EVENT_NAME = "cart:change";
 const UPDATE_EVENT_NAME = "cart:update";
-const WA_NUMBER = "2271415182";
+const WA_NUMBER = "5492271415182";
 
 function read() {
   if (typeof localStorage === "undefined") return [];

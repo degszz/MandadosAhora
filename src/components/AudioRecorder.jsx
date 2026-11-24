@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "preact/hooks";
 import { getSupabase } from "../scripts/supabase.js";
 
-const WA_NUMBER = "2271415182"; // mismo número usado en src/scripts/cart.js
+const WA_NUMBER = "5492271415182"; // mismo número usado en src/scripts/cart.js
 
 const SERVICIOS = [
   { key: "mercado", label: "Mercado" },
@@ -54,6 +54,7 @@ export default function AudioRecorder() {
   const [audioUrl, setAudioUrl] = useState(null);
   const [audioMime, setAudioMime] = useState("");
   const [volume, setVolume] = useState(0);
+  const [toastVisible, setToastVisible] = useState(false);
 
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
@@ -221,6 +222,18 @@ export default function AudioRecorder() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  // Escuchar visibilidad del toast de repartidores para mover el boton
+  useEffect(() => {
+    const onVisible = () => setToastVisible(true);
+    const onHidden = () => setToastVisible(false);
+    window.addEventListener("hiring-toast:visible", onVisible);
+    window.addEventListener("hiring-toast:hidden", onHidden);
+    return () => {
+      window.removeEventListener("hiring-toast:visible", onVisible);
+      window.removeEventListener("hiring-toast:hidden", onHidden);
+    };
+  }, []);
+
   // Cleanup al desmontar
   useEffect(() => {
     return () => {
@@ -313,8 +326,11 @@ Te dejé un audio describiendo lo que necesito.
         audio_url: publicUrl,
       };
 
-      const { data: orderData, error: insertErr } = await sb.from("orders").insert(payload).select("id").single();
+      // ID generado acá: el anónimo puede crear pero no leer pedidos (migración 013)
+      const newId = crypto.randomUUID();
+      const { error: insertErr } = await sb.from("orders").insert({ id: newId, ...payload });
       if (insertErr) throw insertErr;
+      const orderData = { id: newId };
 
       // Guardar order ID en localStorage para seguimiento
       if (orderData?.id) {
@@ -367,7 +383,7 @@ Te dejé un audio describiendo lo que necesito.
   return (
     <>
       {/* Botón flotante */}
-      <div style="position:fixed;bottom:1.5rem;left:1.5rem;z-index:1100">
+      <div style={`position:fixed;bottom:${toastVisible ? "80px" : "1.5rem"};left:1.5rem;z-index:1100;transition:bottom .35s cubic-bezier(.175,.885,.32,1.275)`}>
         <button
           type="button"
           onClick={openModal}

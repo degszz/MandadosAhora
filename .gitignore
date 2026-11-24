@@ -22,3 +22,7 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+
+# Obsidian: estado de la ventana es por usuario
+docs/.obsidian/workspace*.json
+docs/.obsidian/cache
