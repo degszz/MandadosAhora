@@ -47,7 +47,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const { data: order, error: dbErr } = await sb.from("orders")
-      .select("id, total_amount, payment_status, services_count")
+      .select("id, total_amount, payment_status, payment_method, items")
       .eq("id", orderId)
       .maybeSingle();
     if (dbErr) throw dbErr;
@@ -55,6 +55,13 @@ Deno.serve(async (req: Request) => {
     if (order.payment_status !== "pendiente") return json({ error: "El pedido ya no está pendiente de pago" }, 409);
     const amount = Number(order.total_amount);
     if (!amount || amount <= 0) return json({ error: "El pedido no tiene monto" }, 400);
+    // Solo pedidos creados como MercadoPago (los de efectivo no tienen mínimo
+    // en la base) y nunca por debajo del mínimo: se recalcula acá, no se confía
+    // solo en la policy de inserción.
+    if (order.payment_method !== "mercadopago") return json({ error: "El pedido no es con MercadoPago" }, 409);
+    const { data: min, error: minErr } = await sb.rpc("min_order_total", { p_items: order.items });
+    if (minErr) throw minErr;
+    if (amount < Number(min)) return json({ error: "El monto del pedido no es válido" }, 400);
 
     const title = String(body.description || "Mandados Ahora — Servicio de mandados").slice(0, 120);
 

@@ -44,7 +44,7 @@ Todas con `verify_jwt = false`. Secret cargado: `MP_ACCESS_TOKEN` (producción).
 
 | Función | Qué hace | Estado |
 |---|---|---|
-| `create-payment` | Link MP del pedido. Cobra `total_amount` leído de la base; URLs con `SITE_URL`; `external_reference` = ID | Desplegada v4 |
+| `create-payment` | Link MP del pedido. Solo pedidos con `payment_method = mercadopago`; cobra `total_amount` leído de la base y re-chequea el mínimo; URLs con `SITE_URL`; `external_reference` = ID | Desplegada v5 |
 | `create-platform-fee-payment` | Link MP de la comisión (item `<id>-fee`). Monto leído de `orders.platform_fee`, nunca del navegador | Desplegada v2 |
 | `whatsapp-send` | Mensajes por Meta Cloud API | **No desplegada** a propósito |
 | `payment-webhook` | Aviso de MP → re-consulta el pago → compara lo cobrado (ARS) con `total_amount` o `platform_fee` → actualiza `orders`. Si no alcanza, no marca nada | Desplegada v5 |

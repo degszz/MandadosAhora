@@ -27,7 +27,7 @@ Volver: [[00 Inicio]]
 - [x] 2026-11-24 Migración 014: buckets `tickets` (sube usuario logueado) y `comprobantes` (sube cualquiera), públicos para leer.
 - [x] 2026-11-24 `payment-webhook` v5 (solo MP, clave de servicio, distingue comisión `-fee`, verifica monto cobrado) y `create-platform-fee-payment` v2 (monto desde la base) desplegadas.
 - [x] 2026-11-25 Precios editables desde admin → 💲 Precios (envío normal, envío 24hs y % de comisión). Migración 018 + `src/scripts/pricing.js`.
-- [x] 2026-11-25 `create-payment` v4: solo MP, cobra `total_amount` del pedido, URLs desde `SITE_URL`. Migración 019: mínimo de total para pedidos MP.
+- [x] 2026-11-25 `create-payment` v5: solo MP y solo pedidos `payment_method = mercadopago`, cobra `total_amount` del pedido (re-chequea el mínimo con `min_order_total`), URLs desde `SITE_URL`. Migración 019: mínimo de total para pedidos MP.
 - [x] 2026-11-24 Migración 016: trigger `proteger_campos_pago` (solo admin/webhook tocan campos de pago; comisión = 15% de `purchase_amount` calculada en la base) y `set_payment_proof` restringida.
 - [x] 2026-11-24 Migración 015: GRANTs a `service_role` sobre `mandados`. El webhook nunca había podido marcar un pago.
 - [x] 2026-11-24 Stripe fuera del checkout. Panel legacy y contraseña del admin eliminados.
