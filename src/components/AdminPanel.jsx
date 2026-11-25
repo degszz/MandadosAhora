@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from "preact/hooks";
 import { getSupabase, getMyProfile, signOut } from "../scripts/supabase.js";
 import RepartidorPanel from "./RepartidorPanel.jsx";
 import LocalesAdmin from "./LocalesAdmin.jsx";
+import { getPricing, loadPricing, setPricingCache, DEFAULT_PRICING } from "../scripts/pricing.js";
 
 /**
  * Panel admin (modo Google OAuth).
@@ -9,7 +10,7 @@ import LocalesAdmin from "./LocalesAdmin.jsx";
  * Tabs:
  *  1. Repartidores pendientes (verify / reject)
  *  2. Pedidos (Supabase) — reusa <RepartidorPanel mode="admin" />
- *  3. Pedidos legacy (localStorage) — link al panel viejo
+ *  3. Horarios, Resumen, Pagos, Comida, Precios (costos de envío y % de comisión)
  */
 export default function AdminPanel() {
   const [profile, setProfile] = useState(null);
@@ -19,8 +20,6 @@ export default function AdminPanel() {
   const [hiringActive, setHiringActive] = useState(false);
   const [hiringLoading, setHiringLoading] = useState(false);
   const [hiringMsg, setHiringMsg] = useState(null);
-  const SERVICE_FEE_ONLINE = 2500;
-  const SERVICE_FEE_OFFLINE = 3500;
   const sb = useMemo(() => getSupabase(), []);
 
   useEffect(() => {
@@ -158,6 +157,7 @@ export default function AdminPanel() {
           { id: "resumen",      label: "💰 Resumen" },
           { id: "pagos",        label: "💳 Pagos" },
           { id: "comida",       label: "🍔 Comida" },
+          { id: "precios",      label: "💲 Precios" },
         ].map((t) => {
           const active = tab === t.id;
           return (
@@ -178,6 +178,7 @@ export default function AdminPanel() {
       {tab === "resumen" && <ResumenDiario />}
       {tab === "pagos" && <PagosPanel />}
       {tab === "comida" && <LocalesAdmin />}
+      {tab === "precios" && <PreciosPanel />}
     </div>
   );
 }
@@ -841,7 +842,7 @@ function ResumenDiario() {
                 <p style="font-size:0.88rem;font-weight:700;color:#1f2937;margin:0">{fmt(o.total_amount || 0)}</p>
                 <p style="font-size:0.68rem;color:#7c3aed;margin:0">Comisión: {fmt(o.driver_commission || 0)}</p>
                 {Number(o.platform_fee) > 0 && (
-                  <p style="font-size:0.65rem;color:#0ea5e9;margin:0">Fee 15%: {fmt(o.platform_fee)}</p>
+                  <p style="font-size:0.65rem;color:#0ea5e9;margin:0">Comisión: {fmt(o.platform_fee)}</p>
                 )}
                 {o.payment_provider && (
                   <p style="font-size:0.65rem;color:#6b7280;margin:0">
@@ -942,7 +943,7 @@ function PagosPanel() {
           { id: "todos", label: "Todos" },
           { id: "pendientes", label: "Pago pendiente" },
           { id: "pagados", label: "Pagados" },
-          { id: "fee_pendiente", label: "Fee 15% pendiente" },
+          { id: "fee_pendiente", label: "Comisión pendiente" },
           { id: "repartidor_pendiente", label: "Repartidor sin cobrar" },
         ].map((f) => (
           <button key={f.id} onClick={() => setFilter(f.id)}
@@ -993,6 +994,98 @@ function PagosPanel() {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// PreciosPanel — costos de envío y % de comisión (tabla settings)
+// ============================================================
+function PreciosPanel() {
+  const sb = useMemo(() => getSupabase(), []);
+  const [vals, setVals] = useState(() => {
+    const p = getPricing();
+    return { online: String(p.serviceFeeOnline), offline: String(p.serviceFeeOffline), pct: String(p.platformFeePct) };
+  });
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    loadPricing().then((p) =>
+      setVals({ online: String(p.serviceFeeOnline), offline: String(p.serviceFeeOffline), pct: String(p.platformFeePct) })
+    );
+  }, []);
+
+  const set = (k) => (e) => setVals((v) => ({ ...v, [k]: e.currentTarget.value }));
+
+  const save = async () => {
+    const online = Math.round(Number(vals.online));
+    const offline = Math.round(Number(vals.offline));
+    const pct = Number(vals.pct);
+    if (!Number.isFinite(online) || online < 0 || !Number.isFinite(offline) || offline < 0) {
+      setMsg({ ok: false, text: "Los costos de envío tienen que ser números positivos." });
+      return;
+    }
+    if (!Number.isFinite(pct) || pct < 0 || pct > 50) {
+      setMsg({ ok: false, text: "La comisión tiene que estar entre 0 y 50%." });
+      return;
+    }
+    setSaving(true);
+    setMsg(null);
+    const now = new Date().toISOString();
+    const rows = [
+      { key: "service_fee_online", value: online, updated_at: now },
+      { key: "service_fee_offline", value: offline, updated_at: now },
+      { key: "platform_fee_pct", value: pct, updated_at: now },
+    ];
+    const { error } = await sb.from("settings").upsert(rows, { onConflict: "key" });
+    setSaving(false);
+    if (error) {
+      setMsg({ ok: false, text: `No se pudo guardar: ${error.message}` });
+      return;
+    }
+    setPricingCache({ serviceFeeOnline: online, serviceFeeOffline: offline, platformFeePct: pct });
+    setMsg({ ok: true, text: "Precios guardados. Se aplican a los pedidos nuevos." });
+  };
+
+  const field = (label, help, k, prefix, suffix, step) => (
+    <label style="display:block;margin-bottom:0.9rem">
+      <span style="font-size:0.85rem;font-weight:600;color:#1f2937">{label}</span>
+      <span style="display:block;font-size:0.72rem;color:#6b7280;margin:0.1rem 0 0.35rem">{help}</span>
+      <div style="display:flex;align-items:center;gap:0.35rem">
+        {prefix && <span style="font-weight:700;color:#6b7280">{prefix}</span>}
+        <input type="number" min="0" step={step} value={vals[k]} onInput={set(k)}
+          style="width:9rem;padding:0.5rem 0.65rem;border:1px solid #d1d5db;border-radius:0.5rem;font-size:0.95rem;font-weight:600" />
+        {suffix && <span style="font-weight:700;color:#6b7280">{suffix}</span>}
+      </div>
+    </label>
+  );
+
+  return (
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:1rem;padding:1.25rem;max-width:32rem">
+      <h3 style="font-size:1rem;font-weight:700;color:#1f2937;margin:0 0 0.25rem">Precios</h3>
+      <p style="font-size:0.78rem;color:#6b7280;margin:0 0 1rem">
+        Se aplican a los pedidos nuevos. Los pedidos ya hechos conservan su precio.
+      </p>
+      {field("Costo de envío", "Por cada servicio, en horario normal. Lo cobra el repartidor.", "online", "$", null, "100")}
+      {field("Costo de envío 24hs fuera de horario", "Servicio 24hs cuando el negocio está cerrado.", "offline", "$", null, "100")}
+      {field("Comisión de la plataforma", "Porcentaje sobre el ticket de la compra, se cobra al terminar. Entre 0 y 50.", "pct", null, "%", "0.5")}
+      <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+        <button onClick={save} disabled={saving}
+          style={`background:${saving ? "#cbd5e1" : "#377DEC"};color:#fff;border:none;border-radius:0.5rem;padding:0.6rem 1.2rem;font-weight:600;cursor:${saving ? "not-allowed" : "pointer"}`}>
+          {saving ? "Guardando..." : "Guardar precios"}
+        </button>
+        <button type="button"
+          onClick={() => setVals({ online: String(DEFAULT_PRICING.serviceFeeOnline), offline: String(DEFAULT_PRICING.serviceFeeOffline), pct: String(DEFAULT_PRICING.platformFeePct) })}
+          style="background:#fff;color:#6b7280;border:1px solid #d1d5db;border-radius:0.5rem;padding:0.6rem 1rem;font-weight:500;cursor:pointer;font-size:0.85rem">
+          Volver a los valores iniciales
+        </button>
+      </div>
+      {msg && (
+        <p style={`margin:0.8rem 0 0;font-size:0.82rem;padding:0.5rem 0.7rem;border-radius:0.5rem;${msg.ok ? "background:#f0fdf4;color:#166534;border:1px solid #bbf7d0" : "background:#fef2f2;color:#991b1b;border:1px solid #fecaca"}`}>
+          {msg.text}
+        </p>
       )}
     </div>
   );

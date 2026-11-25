@@ -28,6 +28,7 @@ const PRECIO_TRANSFERENCIA = 3000;
   import { createMPPreference } from "../scripts/mercadopago.js";
   import { getProfile, setProfile } from "../scripts/profile.js";
   import { isOfflineNow } from "../scripts/business.js";
+  import { getPricing, loadPricing } from "../scripts/pricing.js";
   import { whatsappOrderUrl } from "../scripts/whatsapp.js";
 
   import {
@@ -43,20 +44,20 @@ const PRECIO_TRANSFERENCIA = 3000;
   const INITIAL_LNG = parseFloat(root.dataset.initialLng);
 
   const ALIAS_MP = "mandadosahora";
+  loadPricing();
 
   // Pricing — nuevo modelo
   // Service fee: lo que cobra el repartidor (va a su cuenta bancaria)
-  // 15% de la compra: se calcula DESPUES de la entrega sobre el ticket real
-  const SERVICE_FEE_ONLINE = 2500;
-  const SERVICE_FEE_OFFLINE = 3500;
-  const PLATFORM_FEE_PERCENT = 15;
+  // Comisión % de la compra: se calcula DESPUES de la entrega sobre el ticket real.
+  // Valores editables desde el admin (src/scripts/pricing.js); se leen en cada cálculo.
 
   // Fuera de horario: estado real del negocio (ver src/scripts/business.js)
   const is24hOffHours = isOfflineNow;
 
   function serviceFeeFor(item) {
-    if ((item.slug === "24horas") && is24hOffHours()) return SERVICE_FEE_OFFLINE;
-    return SERVICE_FEE_ONLINE;
+    const p = getPricing();
+    if ((item.slug === "24horas") && is24hOffHours()) return p.serviceFeeOffline;
+    return p.serviceFeeOnline;
   }
 
   function commissionFor(item) {

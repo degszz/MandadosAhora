@@ -1,5 +1,11 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "preact/hooks";
 import { getSupabase, getMyProfile, signOut } from "../scripts/supabase.js";
+import { getPricing, loadPricing } from "../scripts/pricing.js";
+
+// Precios y % de comisión editables desde el admin. La base calcula la
+// comisión real (migración 018); acá es solo para mostrar.
+if (typeof window !== "undefined") loadPricing();
+const feePct = () => getPricing().platformFeePct;
 
 /**
  * Panel del repartidor (también reutilizado embebido en /admin).
@@ -304,7 +310,7 @@ export default function RepartidorPanel({ mode = "repartidor", todayOnly = true 
           {showBancario && (
             <div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.5rem">
               <p style="font-size:0.72rem;color:#6b7280;margin:0">
-                Acá recibirás el pago de tus servicios ($2.500 c/u online, $3.500 c/u 24h fuera de horario).
+                Acá recibirás el pago de tus servicios (${getPricing().serviceFeeOnline.toLocaleString("es-AR")} c/u online, ${getPricing().serviceFeeOffline.toLocaleString("es-AR")} c/u 24h fuera de horario).
               </p>
               <label style="display:block">
                 <span style="font-size:0.7rem;font-weight:600;color:#374151">Alias o CBU</span>
@@ -432,7 +438,7 @@ function OrderCard({ order, profile, mode, busy, onClaim, onSetStatus, onOpenCha
   const updatePurchaseAmount = (val) => {
     setPurchaseAmount(val);
     const num = parseFloat(val) || 0;
-    setPlatformFee(Math.round(num * 0.15));
+    setPlatformFee(Math.round(num * feePct() / 100));
   };
 
   const handleTicketFile = (e) => {
@@ -463,7 +469,7 @@ function OrderCard({ order, profile, mode, busy, onClaim, onSetStatus, onOpenCha
           ticketUrl = pub?.publicUrl || null;
         }
       }
-      const fee = Math.round(amount * 0.15);
+      const fee = Math.round(amount * feePct() / 100);
       const { error } = await sb.from("orders").update({
         purchase_amount: amount,
         ticket_url: ticketUrl,
@@ -503,14 +509,14 @@ function OrderCard({ order, profile, mode, busy, onClaim, onSetStatus, onOpenCha
 
   const buildPurchaseWA = () => {
     const amount = parseFloat(purchaseAmount) || 0;
-    const fee = Math.round(amount * 0.15);
+    const fee = Math.round(amount * feePct() / 100);
     const lines = [
       `*RESUMEN DE COMPRA*`,
       ``,
       `Pedido: ${order.id?.slice(0, 8)}…`,
       `Cliente: ${order.customer_name || "—"}`,
       `Total gastado: $${amount.toLocaleString("es-AR")}`,
-      `Comisión plataforma (15%): $${fee.toLocaleString("es-AR")}`,
+      `Comisión plataforma (${feePct()}%): $${fee.toLocaleString("es-AR")}`,
       ``,
       `Pagá los $${fee.toLocaleString("es-AR")} con:`,
     ];
@@ -743,7 +749,7 @@ function OrderCard({ order, profile, mode, busy, onClaim, onSetStatus, onOpenCha
                 📋 Completá los datos de la compra
               </p>
               <p style="font-size:0.7rem;color:#6b7280;margin:0 0 0.6rem">
-                El 15% del total se cobrará al cliente como comisión de plataforma.
+                El {feePct()}% del total se cobrará al cliente como comisión de plataforma.
               </p>
 
               <label style="display:block;margin-bottom:0.5rem">
@@ -765,7 +771,7 @@ function OrderCard({ order, profile, mode, busy, onClaim, onSetStatus, onOpenCha
 
               {platformFee > 0 && (
                 <div style="background:#EBF3FF;border:1px solid #BFD7FF;border-radius:0.5rem;padding:0.5rem 0.65rem;margin-bottom:0.5rem;display:flex;justify-content:space-between;align-items:center">
-                  <span style="font-size:0.75rem;font-weight:600;color:#1e40af">15% comisión:</span>
+                  <span style="font-size:0.75rem;font-weight:600;color:#1e40af">{feePct()}% comisión:</span>
                   <span style="font-size:0.9rem;font-weight:700;color:#377DEC">${platformFee.toLocaleString("es-AR")}</span>
                 </div>
               )}
@@ -792,7 +798,7 @@ function OrderCard({ order, profile, mode, busy, onClaim, onSetStatus, onOpenCha
                   disabled={savingPurchase || !purchaseAmount || parseFloat(purchaseAmount) <= 0}
                   style={`flex:1;padding:0.55rem;border-radius:0.5rem;border:none;font-weight:600;font-size:0.82rem;cursor:${savingPurchase || !purchaseAmount ? "not-allowed" : "pointer"};background:${savingPurchase ? "#cbd5e1" : "#16a34a"};color:#fff`}
                 >
-                  {savingPurchase ? "Guardando..." : "💾 Guardar y calcular 15%"}
+                  {savingPurchase ? "Guardando..." : `💾 Guardar y calcular ${feePct()}%`}
                 </button>
               </div>
             </div>
@@ -806,8 +812,8 @@ function OrderCard({ order, profile, mode, busy, onClaim, onSetStatus, onOpenCha
               <div style="font-size:0.78rem;color:#374151;display:flex;flex-direction:column;gap:0.15rem;margin-bottom:0.5rem">
                 <span>Total compra: <b>${
                   (parseFloat(purchaseAmount) || 0).toLocaleString("es-AR")}</b></span>
-                <span>15% a cobrar: <b style="color:#377DEC">${
-                  (Math.round((parseFloat(purchaseAmount) || 0) * 0.15)).toLocaleString("es-AR")}</b></span>
+                <span>{feePct()}% a cobrar: <b style="color:#377DEC">${
+                  (Math.round((parseFloat(purchaseAmount) || 0) * feePct() / 100)).toLocaleString("es-AR")}</b></span>
               </div>
               {feePaymentUrl && (
                 <div style="background:#fff;border:1px solid #d1d5db;border-radius:0.5rem;padding:0.5rem;margin-bottom:0.5rem">

@@ -58,7 +58,7 @@
         <div><dt>Servicio</dt><dd id="pr-r-total"></dd></div>
       </dl>
       <p id="pr-nocturno" class="pr-nocturno" hidden>🌙 Estamos fuera de horario: va por el servicio 24 Horas, con tarifa nocturna.</p>
-      <p class="pr-nota">Las compras se pagan aparte, según el ticket, más un 15% de comisión al terminar.</p>
+      <p class="pr-nota">Las compras se pagan aparte, según el ticket, más un <span data-fee-pct>15</span>% de comisión al terminar.</p>
     </section>
 
     <!-- Final -->
@@ -141,9 +141,8 @@
   import { getProfile, setProfile } from "../scripts/profile.js";
   import { fetchBusinessStatus, isOfflineNow } from "../scripts/business.js";
   import { whatsappOrderUrl } from "../scripts/whatsapp.js";
+  import { getPricing, loadPricing } from "../scripts/pricing.js";
 
-  const FEE_NORMAL = 2500;
-  const FEE_NOCTURNO = 3500;
   const TITULOS = { 1: "¿Dónde te lo llevamos?", 2: "Tus datos y pago", 3: "Confirmá tu pedido", 4: "¡Pedido recibido!" };
 
   const $ = (id) => document.getElementById(id);
@@ -153,7 +152,12 @@
 
   const state = { step: 1, gps: null, pago: null, offline: false, saving: false, lastFocus: null };
   const ars = (n) => "$" + Number(n).toLocaleString("es-AR");
-  const fee = () => (state.offline ? FEE_NOCTURNO : FEE_NORMAL);
+  // Costos editables desde el admin (src/scripts/pricing.js)
+  const fee = () => { const p = getPricing(); return state.offline ? p.serviceFeeOffline : p.serviceFeeOnline; };
+  const paintPct = () => document.querySelectorAll("[data-fee-pct]").forEach((el) => { el.textContent = String(getPricing().platformFeePct); });
+  paintPct();
+  window.addEventListener("pricing:change", paintPct);
+  loadPricing();
 
   function setMsg(el, msg) {
     el.textContent = msg || "";

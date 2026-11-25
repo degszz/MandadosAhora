@@ -127,6 +127,7 @@
 <script>
   import { getItems, removeItem, updateItem, clear, subscribe } from "../scripts/cart.js";
   import { isOfflineNow } from "../scripts/business.js";
+  import { getPricing, loadPricing } from "../scripts/pricing.js";
   import { SERVICIOS } from "../data/servicios.js";
 
   const toggle = document.getElementById("cart-toggle");
@@ -181,8 +182,7 @@
   function renderItems() {
     const items = getItems();
 
-    const SERVICE_FEE_ONLINE = 2500;
-    const SERVICE_FEE_OFFLINE = 3500;
+    const { serviceFeeOnline: SERVICE_FEE_ONLINE, serviceFeeOffline: SERVICE_FEE_OFFLINE } = getPricing();
 
     // Fuera de horario: estado real del negocio (ver src/scripts/business.js)
     const is24hOffHours = isOfflineNow;
@@ -253,7 +253,7 @@
             ${avatar}
             <div class="min-w-0">
               <p style="font-weight:600;color:#1f2937;font-size:0.875rem" class="truncate">${escapeHtml(item.servicio)}</p>
-              <p style="font-size:0.75rem;color:${serviceFeeFor(item) > 2500 ? '#d97706' : '#377DEC'};font-weight:600">$${serviceFeeFor(item).toLocaleString("es-AR")}</p>
+              <p style="font-size:0.75rem;color:${serviceFeeFor(item) > SERVICE_FEE_ONLINE ? '#d97706' : '#377DEC'};font-weight:600">$${serviceFeeFor(item).toLocaleString("es-AR")}</p>
             </div>
           </div>
           <button
@@ -343,5 +343,8 @@
   });
 
   subscribe(renderItems);
+  // Precios editables desde el admin: refrescar al cargar y re-render si cambian
+  window.addEventListener("pricing:change", () => renderItems());
+  loadPricing();
   renderItems();
 </script>

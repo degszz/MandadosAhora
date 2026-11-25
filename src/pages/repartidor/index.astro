@@ -64,12 +64,12 @@ import "../../styles/global.css";
         </h2>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.65rem">
           <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #bbf7d0;border-radius:0.875rem;padding:1rem;text-align:center">
-            <div style="font-size:1.5rem;font-weight:800;color:#166534;font-family:'Poppins',sans-serif">$2.000</div>
+            <div style="font-size:1.5rem;font-weight:800;color:#166534;font-family:'Poppins',sans-serif" data-price="online">$2.500</div>
             <div style="font-size:0.72rem;color:#15803d;font-weight:600;margin-top:0.2rem">por servicio</div>
             <div style="font-size:0.65rem;color:#6b7280;margin-top:0.15rem">Horario laboral</div>
           </div>
           <div style="background:linear-gradient(135deg,#fefce8,#fef9c3);border:1.5px solid #fde68a;border-radius:0.875rem;padding:1rem;text-align:center">
-            <div style="font-size:1.5rem;font-weight:800;color:#92400e;font-family:'Poppins',sans-serif">$3.500</div>
+            <div style="font-size:1.5rem;font-weight:800;color:#92400e;font-family:'Poppins',sans-serif" data-price="offline">$3.500</div>
             <div style="font-size:0.72rem;color:#a16207;font-weight:600;margin-top:0.2rem">por servicio</div>
             <div style="font-size:0.65rem;color:#6b7280;margin-top:0.15rem">24hs fuera de horario</div>
           </div>
@@ -127,6 +127,18 @@ import "../../styles/global.css";
 
 <script>
   import { getSupabase, signInWithGoogle, getMyProfile } from "../../scripts/supabase.js";
+  import { getPricing, loadPricing, fmtARS } from "../../scripts/pricing.js";
+
+  // Ganancias por servicio: editables desde el admin
+  const paintPrices = () => {
+    const p = getPricing();
+    document.querySelectorAll("[data-price]").forEach((el) => {
+      el.textContent = fmtARS(el.dataset.price === "offline" ? p.serviceFeeOffline : p.serviceFeeOnline);
+    });
+  };
+  paintPrices();
+  window.addEventListener("pricing:change", paintPrices);
+  loadPricing();
 
   const btn = document.getElementById("google-btn");
   const lbl = document.getElementById("google-btn-label");

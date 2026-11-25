@@ -44,12 +44,12 @@ Todas con `verify_jwt = false`. Secret cargado: `MP_ACCESS_TOKEN` (producción).
 
 | Función | Qué hace | Estado |
 |---|---|---|
-| `create-payment` | Preferencia MP del pedido (`external_reference` = ID del pedido) | Desplegada. **El repo no coincide** con lo desplegado |
-| `create-platform-fee-payment` | Link MP del 15% (item `<id>-fee`). Monto leído de `orders.platform_fee`, nunca del navegador | Desplegada v2 |
+| `create-payment` | Link MP del pedido. Cobra `total_amount` leído de la base; URLs con `SITE_URL`; `external_reference` = ID | Desplegada v4 |
+| `create-platform-fee-payment` | Link MP de la comisión (item `<id>-fee`). Monto leído de `orders.platform_fee`, nunca del navegador | Desplegada v2 |
+| `whatsapp-send` | Mensajes por Meta Cloud API | **No desplegada** a propósito |
 | `payment-webhook` | Aviso de MP → re-consulta el pago → compara lo cobrado (ARS) con `total_amount` o `platform_fee` → actualiza `orders`. Si no alcanza, no marca nada | Desplegada v5 |
 
 **Ojo:** el rol `service_role` necesita GRANTs explícitos sobre el schema `mandados` (015). Sin eso las funciones fallan con 42501 y el webhook nunca marcaba pagos.
-| `whatsapp-send` | Mensajes por Meta Cloud API | **No desplegada** a propósito |
 
 ## Migraciones
-`supabase/migrations/001`–`017`. 016/017: trigger `proteger_campos_pago` en `orders`. Quien no es admin ni webhook no puede tocar `payment_status`, `paid_at`, `payment_reference`, `total_amount`, `paid_to_repartidor` ni `platform_fee_paid`; `platform_fee` siempre se deriva de `purchase_amount` (15%, null si no hay compra); `purchase_amount` > 0 y congelado una vez paga la comisión. Es `security invoker` a propósito (con definer, `current_user` sería siempre `postgres`). **No aplicar 003** (borra `schedules`) **ni la parte de settings de 008** (abre la escritura). La base real no sigue los archivos uno a uno: revisar con `list_tables` antes de aplicar.
+`supabase/migrations/001`–`019`. 018: `platform_fee_pct` configurable. 019: mínimo de `total_amount` en pedidos MP. 016/017: trigger `proteger_campos_pago` en `orders`. Quien no es admin ni webhook no puede tocar `payment_status`, `paid_at`, `payment_reference`, `total_amount`, `paid_to_repartidor` ni `platform_fee_paid`; `platform_fee` siempre se deriva de `purchase_amount` (% de `platform_fee_pct`, null si no hay compra); `purchase_amount` > 0 y congelado una vez paga la comisión. Es `security invoker` a propósito (con definer, `current_user` sería siempre `postgres`). **No aplicar 003** (borra `schedules`) **ni la parte de settings de 008** (abre la escritura). La base real no sigue los archivos uno a uno: revisar con `list_tables` antes de aplicar.

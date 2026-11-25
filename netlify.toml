@@ -1,0 +1,9 @@
+# Build de Netlify (se usa cuando el sitio está conectado al repo de GitHub).
+# Variables que hay que cargar en Netlify → Project configuration → Environment variables:
+#   PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY (las mismas del .env local)
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"

@@ -739,7 +739,10 @@ const ORBITAL = ORBITAL_SLUGS
           var badge24 = document.createElement("span");
           badge24.className = "svc-open-badge";
           badge24.style.cssText = "position:absolute;top:8px;right:8px;background:" + (isOffHours ? "#d97706" : "#16a34a") + ";color:#fff;font-size:0.6rem;font-weight:700;padding:0.15rem 0.45rem;border-radius:9999px;z-index:20;pointer-events:none";
-          badge24.textContent = isOffHours ? "Disponible · $3.500" : "Abierto 24hs";
+          // Precio nocturno editable desde el admin (cache de src/scripts/pricing.js)
+          let off24 = 3500;
+          try { const pr = JSON.parse(localStorage.getItem("mandados_pricing_v1") || "null"); if (pr && Number.isFinite(pr.serviceFeeOffline)) off24 = pr.serviceFeeOffline; } catch {}
+          badge24.textContent = isOffHours ? "Disponible · $" + off24.toLocaleString("es-AR") : "Abierto 24hs";
           card.appendChild(badge24);
           if (isOffHours) {
             card.style.borderColor = "#fde68a";

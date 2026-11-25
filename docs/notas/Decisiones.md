@@ -4,6 +4,7 @@ Volver: [[00 Inicio]]
 
 Registro corto: qué se decidió y por qué. Lo más nuevo arriba.
 
+- **2026-11-25 — Precios en `settings`, cálculo en la base.** El admin edita envío y % de comisión. El frontend los muestra con `pricing.js`, pero los montos que se cobran salen siempre de la base (trigger y edge functions), nunca del navegador.
 - **2026-11-24 — Clientes sin lectura de tablas.** El anónimo crea pedidos (el ID se genera en el navegador con `crypto.randomUUID()`, porque no puede leer la fila de vuelta) y consulta uno solo por ID exacto con funciones `security definer`. `/pedido` consulta cada 6 s en vez de Realtime, porque Realtime necesita lectura abierta. Antes cualquiera podía listar y modificar todos los pedidos.
 - **2026-11-24 — Solo MercadoPago.** Stripe no opera en Argentina; MP ya cobra con tarjeta. `whatsapp-send` no se despliega hasta tener la API de Meta: sería un endpoint abierto que manda mensajes.
 - **2026-11-21 — Pedido rápido con asistente de 3 pasos.** Guarda en el panel y recién después ofrece WhatsApp con un botón, porque los celulares bloquean abrirlo solo. Ver [[Pedido rápido]].
